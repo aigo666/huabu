@@ -45,18 +45,25 @@ fi
 
 log "部署目录: ${DEPLOY_DIR}"
 log "代码仓库: ${REPO_URL} (${BRANCH})"
-log "容器端口: ${HOST_PORT} -> 80"
+log "端口映射: 宿主机 ${HOST_PORT} -> 容器内 80 (nginx)"
 log "API 代理: ${API_PROXY}"
-
-mkdir -p "${DEPLOY_DIR}"
 
 if [ -d "${DEPLOY_DIR}/.git" ]; then
   log "拉取最新代码..."
   git -C "${DEPLOY_DIR}" fetch origin "${BRANCH}"
   git -C "${DEPLOY_DIR}" checkout "${BRANCH}"
   git -C "${DEPLOY_DIR}" reset --hard "origin/${BRANCH}"
+elif [ -d "${DEPLOY_DIR}" ]; then
+  # 常见场景：先 curl 下载 deploy.sh 再执行，目录非空但没有 .git
+  log "目录已存在，初始化并拉取代码..."
+  git -C "${DEPLOY_DIR}" init -q
+  git -C "${DEPLOY_DIR}" remote add origin "${REPO_URL}" 2>/dev/null \
+    || git -C "${DEPLOY_DIR}" remote set-url origin "${REPO_URL}"
+  git -C "${DEPLOY_DIR}" fetch origin "${BRANCH}" --depth 1
+  git -C "${DEPLOY_DIR}" checkout -f -B "${BRANCH}" "origin/${BRANCH}"
 else
   log "首次克隆仓库..."
+  mkdir -p "$(dirname "${DEPLOY_DIR}")"
   git clone --branch "${BRANCH}" --depth 1 "${REPO_URL}" "${DEPLOY_DIR}"
 fi
 

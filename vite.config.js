@@ -12,9 +12,10 @@ export default defineConfig({
     }
   },
   server: {
+    host: '127.0.0.1',
     proxy: {
       '/v1': {
-        target: 'https://api.chatfire.site',
+        target: 'https://api.xgapi.top',
         changeOrigin: true
       }
     }

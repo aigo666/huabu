@@ -15,7 +15,7 @@
           <n-form-item label="Base URL" path="baseUrl">
             <n-input
               v-model:value="formData.baseUrl"
-              placeholder="https://api.chatfire.site/v1"
+              placeholder="https://api.xgapi.top"
             />
           </n-form-item>
           <n-form-item label="API Key" path="apiKey">

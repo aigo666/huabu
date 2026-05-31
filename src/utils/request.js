@@ -6,7 +6,7 @@
 import axios from 'axios'
 
 // Base URL from environment or default
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.chatfire.site'
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.xgapi.top'
 
 // Create axios instance | 创建 axios 实例
 const instance = axios.create({

@@ -6,8 +6,8 @@
 // 渠道适配配置
 export const PROVIDERS = {
   chatfire: {
-    label: '火宝 (Chatfire)',
-    defaultBaseUrl: 'https://api.chatfire.site',
+    label: '星光 API',
+    defaultBaseUrl: 'https://api.xgapi.top',
     // 端点路径
     endpoints: {
       chat: '/v1/chat/completions',

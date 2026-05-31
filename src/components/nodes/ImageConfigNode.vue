@@ -22,13 +22,13 @@
           @keydown.escape="cancelEditLabel"
           class="text-sm font-medium bg-[var(--bg-tertiary)] text-[var(--text-secondary)] px-1 rounded outline-none border border-blue-500"
         />
-        <div class="flex items-center gap-1">
-          <button @click="handleDuplicate" class="p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors" title="复制节点">
+        <div class="flex items-center gap-1 nodrag nopan">
+          <button @click.stop="handleDuplicate" class="nodrag nopan p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors" title="复制节点">
             <n-icon :size="14">
               <CopyOutline />
             </n-icon>
           </button>
-          <button @click="handleDelete" class="p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors" title="删除节点">
+          <button @click.stop="handleDelete" class="nodrag nopan p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors" title="删除节点">
             <n-icon :size="14">
               <TrashOutline />
             </n-icon>
@@ -37,21 +37,24 @@
       </div>
 
       <!-- Config options | 配置选项 -->
-      <div class="p-3 space-y-3">
-        <!-- Model selector | 模型选择 -->
-        <div class="flex items-center justify-between">
-          <span class="text-xs text-[var(--text-secondary)]">模型</span>
-          <n-dropdown :options="modelOptions" @select="handleModelSelect">
-            <button class="flex items-center gap-1 text-sm text-[var(--text-primary)] hover:text-[var(--accent-color)]">
-              {{ displayModelName }}
-              <n-icon :size="12"><ChevronDownOutline /></n-icon>
-            </button>
-          </n-dropdown>
-        </div>
+      <div class="p-3 space-y-3 nodrag nopan">
+        <!-- Token selector | 令牌选择（优先） -->
+        <NodeTokenSelect
+          v-model="localTokenId"
+          @update:model-value="handleTokenSelect"
+        />
 
-        <!-- Quality selector | 画质选择 -->
+        <!-- Model selector | 模型选择（内置 + 自定义，随令牌过滤） -->
+        <NodeModelSelect
+          v-model="localModel"
+          type="image"
+          :token-id="localTokenId"
+          @update:model-value="handleModelSelect"
+        />
+
+        <!-- Quality / Resolution selector | 画质/分辨率选择 -->
         <div v-if="hasQualityOptions" class="flex items-center justify-between">
-          <span class="text-xs text-[var(--text-secondary)]">画质</span>
+          <span class="text-xs text-[var(--text-secondary)]">{{ qualityLabel }}</span>
           <n-dropdown :options="qualityOptions" @select="handleQualitySelect">
             <button class="flex items-center gap-1 text-sm text-[var(--text-primary)] hover:text-[var(--accent-color)]">
               {{ displayQuality }}
@@ -60,9 +63,9 @@
           </n-dropdown>
         </div>
 
-        <!-- Size selector | 尺寸选择 -->
+        <!-- Size / Aspect ratio selector | 尺寸/比例选择 -->
         <div v-if="hasSizeOptions" class="flex items-center justify-between">
-          <span class="text-xs text-[var(--text-secondary)]">尺寸</span>
+          <span class="text-xs text-[var(--text-secondary)]">{{ sizeLabel }}</span>
           <div class="flex items-center gap-2">
             <n-dropdown :options="sizeOptions" @select="handleSizeSelect">
               <button
@@ -165,8 +168,11 @@ import { ChevronDownOutline, ChevronForwardOutline, CopyOutline, TrashOutline, R
 import { useImageGeneration } from '../../hooks'
 import { updateNode, addNode, addEdge, nodes, edges, duplicateNode, removeNode } from '../../stores/canvas'
 import NodeHandleMenu from './NodeHandleMenu.vue'
+import NodeTokenSelect from './NodeTokenSelect.vue'
+import NodeModelSelect from './NodeModelSelect.vue'
 import { useModelStore } from '../../stores/pinia'
 import { getModelSizeOptions, getModelQualityOptions, getModelConfig, DEFAULT_IMAGE_MODEL } from '../../stores/models'
+import { hasIndependentQualitySize } from '../../config/models'
 import { parseMentions } from '../../hooks/useNodeRef'
 
 // 使用 Pinia store 获取模型选项（根据渠道过滤）
@@ -189,8 +195,19 @@ const { loading, error, images: generatedImages, generate } = useImageGeneration
 // Local state | 本地状态
 const showHandleMenu = ref(false)
 const localModel = ref(props.data?.model || DEFAULT_IMAGE_MODEL)
+const localTokenId = ref(props.data?.tokenId || '')
 const localSize = ref(props.data?.size || '2048x2048')
 const localQuality = ref(props.data?.quality || 'standard')
+
+const qualityLabel = computed(() => {
+  if (currentModelConfig.value?.imageApi === 'chat-completions') return '分辨率'
+  return '画质'
+})
+
+const sizeLabel = computed(() => {
+  if (currentModelConfig.value?.imageApi === 'chat-completions') return '比例'
+  return '尺寸'
+})
 
 // Label editing state | Label 编辑状态
 const isEditingLabel = ref(false)
@@ -233,20 +250,6 @@ const handleSelect = (item) => {
 // Get current model config | 获取当前模型配置
 const currentModelConfig = computed(() => getModelConfig(localModel.value))
 
-// Model options from Pinia store (filtered by provider) | 从 Pinia store 获取模型选项（根据渠道过滤）
-const modelOptions = computed(() => modelStore.allImageModelOptions)
-
-// Display model name | 显示模型名称
-const displayModelName = computed(() => {
-  const model = modelOptions.value.find(m => m.key === localModel.value)
-  // 如果当前模型不在选项中，尝试从 allImageModels 找到
-  if (!model) {
-    const allModel = modelStore.allImageModels.find(m => m.key === localModel.value)
-    return allModel?.label || localModel.value || '选择模型'
-  }
-  return model?.label || localModel.value || '选择模型'
-})
-
 // Quality options based on model | 基于模型的画质选项
 const qualityOptions = computed(() => {
   return getModelQualityOptions(localModel.value)
@@ -257,10 +260,10 @@ const hasQualityOptions = computed(() => {
   return qualityOptions.value && qualityOptions.value.length > 0
 })
 
-// Display quality | 显示画质
+// Display quality / resolution | 显示画质或分辨率
 const displayQuality = computed(() => {
   const option = qualityOptions.value.find(o => o.key === localQuality.value)
-  return option?.label || '标准画质'
+  return option?.label || localQuality.value || '1K'
 })
 
 // Size options based on model and quality | 基于模型和画质的尺寸选项
@@ -282,13 +285,21 @@ const displaySize = computed(() => {
 
 // Initialize on mount | 挂载时初始化
 onMounted(() => {
+  const config = getModelConfig(localModel.value)
+  if (hasIndependentQualitySize(config) && (!localQuality.value || localQuality.value === 'standard')) {
+    localQuality.value = config.defaultParams?.quality || '1K'
+  }
+  if (hasIndependentQualitySize(config) && localSize.value === '2048x2048' && config.defaultParams?.size !== '2048x2048') {
+    localSize.value = config.defaultParams?.size || '1x1'
+  }
+
   // 检查当前模型是否在可用模型列表中
-  const availableModels = modelStore.availableImageModels
+  const availableModels = modelStore.getNodeTokenModels('image', localTokenId.value)
   const isModelAvailable = availableModels.some(m => m.key === localModel.value)
 
   if (!localModel.value || !isModelAvailable) {
-    // 使用 store 中的默认模型或第一个可用模型
-    localModel.value = modelStore.selectedImageModel || availableModels[0]?.key || DEFAULT_IMAGE_MODEL
+    const next = availableModels[0]?.key || DEFAULT_IMAGE_MODEL
+    localModel.value = next
     updateNode(props.id, { model: localModel.value })
   }
 })
@@ -502,9 +513,31 @@ const handleModelSelect = (key) => {
   })
 }
 
-// Handle quality selection | 处理画质选择
+const handleTokenSelect = (tokenId) => {
+  localTokenId.value = tokenId
+  updateNode(props.id, { tokenId: tokenId || null })
+  syncModelToToken()
+}
+
+const syncModelToToken = () => {
+  const models = modelStore.getNodeTokenModels('image', localTokenId.value)
+  if (!models.length) return
+  if (!models.some((m) => m.key === localModel.value)) {
+    handleModelSelect(models[0].key)
+  }
+}
+
+// Handle quality selection | 处理画质/分辨率选择
 const handleQualitySelect = (quality) => {
   localQuality.value = quality
+  const config = getModelConfig(localModel.value)
+
+  // Banana / GPT Image：比例与画质/分辨率独立，不联动修改
+  if (hasIndependentQualitySize(config)) {
+    updateNode(props.id, { quality })
+    return
+  }
+
   // Update size to first option of new quality | 更新尺寸为新画质的第一个选项
   const newSizeOptions = getModelSizeOptions(localModel.value, quality)
   if (newSizeOptions.length > 0) {
@@ -652,7 +685,8 @@ const handleGenerate = async (mode = 'auto') => {
       prompt: prompt,
       size: localSize.value,
       quality: localQuality.value,
-      n: 1
+      n: 1,
+      tokenId: localTokenId.value || undefined
     }
 
     // Add reference image if provided | 如果有参考图则添加
@@ -677,6 +711,10 @@ const handleGenerate = async (mode = 'auto') => {
     }
     window.$message?.success('图片生成成功')
   } catch (err) {
+    console.error('[ImageConfigNode] 生成失败:', err)
+    if (err.response?.data) {
+      console.error('[ImageConfigNode] 响应详情:', err.response.data)
+    }
     // Update node to show error | 更新节点显示错误
     updateNode(imageNodeId, {
       loading: false,

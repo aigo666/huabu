@@ -25,13 +25,13 @@
           @keydown.escape="cancelEditLabel"
           class="text-sm font-medium bg-[var(--bg-tertiary)] text-[var(--text-secondary)] px-1 rounded outline-none border border-blue-500"
         />
-        <div class="flex items-center gap-1">
-          <button @click="handleDuplicate" class="p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors" title="复制节点">
+        <div class="flex items-center gap-1 nodrag nopan">
+          <button @click.stop="handleDuplicate" class="nodrag nopan p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors" title="复制节点">
             <n-icon :size="14">
               <CopyOutline />
             </n-icon>
           </button>
-          <button @click="handleDelete" class="p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors" title="删除节点">
+          <button @click.stop="handleDelete" class="nodrag nopan p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors" title="删除节点">
             <n-icon :size="14">
               <TrashOutline />
             </n-icon>
@@ -45,7 +45,7 @@
     </div>
     
     <!-- Video preview area | 视频预览区域 -->
-    <div class="p-3">
+    <div class="p-3 nodrag nopan">
       <!-- Loading state | 加载状态 -->
       <div 
         v-if="(data.taskId && !data.url) || (data.loading && !data.taskId)"
@@ -198,13 +198,17 @@ const startPolling = async (taskId) => {
   isPolling.value = true
 
   try {
-    const result = await pollVideoTask(taskId, (attempt, percentage) => {
-      // 更新进度
-      updateNode(props.id, {
-        progress: percentage,
-        attempt
-      })
-    })
+    const result = await pollVideoTask(
+      taskId,
+      { tokenId: props.data?.tokenId, model: props.data?.model },
+      (attempt, percentage) => {
+        // 更新进度
+        updateNode(props.id, {
+          progress: percentage,
+          attempt
+        })
+      }
+    )
     // 轮询成功，更新视频节点
     updateNode(props.id, {
       url: result.url,

@@ -19,14 +19,14 @@
             @keydown.enter="finishEditLabel" @keydown.escape="cancelEditLabel"
             class="text-sm font-medium bg-[var(--bg-tertiary)] text-[var(--text-secondary)] px-1 rounded outline-none border border-purple-500" />
         </div>
-        <div class="flex items-center gap-1">
-          <button @click="handleDuplicate" class="p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors"
+        <div class="flex items-center gap-1 nodrag nopan">
+          <button @click.stop="handleDuplicate" class="nodrag nopan p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors"
             title="复制节点">
             <n-icon :size="14">
               <CopyOutline />
             </n-icon>
           </button>
-          <button @click="handleDelete" class="p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors"
+          <button @click.stop="handleDelete" class="nodrag nopan p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors"
             title="删除节点">
             <n-icon :size="14">
               <TrashOutline />
@@ -36,7 +36,7 @@
       </div>
 
       <!-- Config content | 配置内容 -->
-      <div class="p-3 space-y-3">
+      <div class="p-3 space-y-3 nodrag nopan">
         <!-- System prompt | 系统提示词 -->
         <div class="relative">
           <label class="text-xs text-[var(--text-secondary)] mb-1 block">系统提示词</label>
@@ -58,12 +58,19 @@
           </div> -->
         </div>
 
-        <!-- Model selection | 模型选择 -->
-        <div>
-          <label class="text-xs text-[var(--text-secondary)] mb-1 block">模型</label>
-          <n-select v-model:value="model" :options="modelOptions" label-field="label" value-field="key" size="small"
-            @update:value="updateConfig" />
-        </div>
+        <!-- Token selector | 令牌选择（优先） -->
+        <NodeTokenSelect
+          v-model="localTokenId"
+          class="mt-2"
+          @update:model-value="handleTokenSelect"
+        />
+        <NodeModelSelect
+          v-model="model"
+          type="chat"
+          :token-id="localTokenId"
+          class="mt-1"
+          @update:model-value="onModelChange"
+        />
 
         <!-- Output format | 输出格式 -->
         <div>
@@ -145,6 +152,8 @@ import { NIcon, NSpin, NSelect } from 'naive-ui'
 import { TrashOutline, CopyOutline, ChatbubbleOutline, SparklesOutline, ListOutline, ImageOutline, VideocamOutline, DocumentTextOutline } from '@vicons/ionicons5'
 import { updateNode, removeNode, duplicateNode, addNode, addEdge, addNodes, addEdges, nodes, edges, startBatchOperation, endBatchOperation } from '../../stores/canvas'
 import NodeHandleMenu from './NodeHandleMenu.vue'
+import NodeTokenSelect from './NodeTokenSelect.vue'
+import NodeModelSelect from './NodeModelSelect.vue'
 import MentionsPicker from '../MentionsPicker.vue'
 import { useChat } from '../../hooks'
 import { useModelStore } from '../../stores/pinia'
@@ -649,12 +658,11 @@ watch(systemPrompt, (newVal) => {
 // Initialize editor content | 初始化 editor 内容
 onMounted(() => {
   // 检查当前模型是否在可用模型列表中
-  const availableModels = modelStore.availableChatModels
+  const availableModels = modelStore.getNodeTokenModels('chat', localTokenId.value)
   const isModelAvailable = availableModels.some(m => m.key === model.value)
 
   if (!model.value || !isModelAvailable) {
-    // 使用 store 中的默认模型或第一个可用模型
-    model.value = modelStore.selectedChatModel || availableModels[0]?.key || 'gpt-4o-mini'
+    model.value = availableModels[0]?.key || 'gpt-4o-mini'
     updateConfig()
   }
 
@@ -679,11 +687,14 @@ const splitMessage = ref('')
 // Model Store (Pinia) | 模型配置 Store
 const modelStore = useModelStore()
 
-// 使用全部模型（不按渠道过滤）
-const modelOptions = computed(() => modelStore.allChatModelOptions)
+const onModelChange = (modelKey) => {
+  model.value = modelKey
+  updateConfig()
+}
 
 // 默认模型使用选中的模型
 const model = ref(props.data?.model || modelStore.selectedChatModel || 'gpt-4o-mini')
+const localTokenId = ref(props.data?.tokenId || '')
 // Format options | 格式选项
 const formatOptions = [
   { label: '纯文本', value: 'text' },
@@ -710,9 +721,25 @@ const updateConfig = () => {
       systemPrompt: systemPrompt.value,
       model: model.value,
       outputFormat: outputFormat.value,
-      outputContent: outputContent.value
+      outputContent: outputContent.value,
+      tokenId: localTokenId.value || null
     })
   }, 150)
+}
+
+const handleTokenSelect = (tokenId) => {
+  localTokenId.value = tokenId
+  updateNode(props.id, { tokenId: tokenId || null })
+  syncModelToToken()
+}
+
+const syncModelToToken = () => {
+  const models = modelStore.getNodeTokenModels('chat', localTokenId.value)
+  if (!models.length) return
+  if (!models.some((m) => m.key === model.value)) {
+    model.value = models[0].key
+    updateConfig()
+  }
 }
 
 // Get input from connected nodes | 获取连接节点的输入
@@ -838,7 +865,8 @@ const handleGenerate = async () => {
 
     const { send } = useChat({
       systemPrompt: resolvedSystemPrompt,
-      model: model.value
+      model: model.value,
+      tokenId: localTokenId.value || undefined
     })
 
     // 如果 user 消息为空，使用简单提示

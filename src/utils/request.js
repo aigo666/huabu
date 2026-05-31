@@ -4,6 +4,13 @@
  */
 
 import axios from 'axios'
+import { formatApiErrorMessage, logApiError, toApiError } from './apiError'
+import { getCurrentTokenApiKey } from './apiTokens'
+
+const pickBizMessage = (data) => {
+  if (!data || typeof data !== 'object') return ''
+  return data.message || data.msg || data.error?.message || ''
+}
 
 // Base URL from environment or default
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.xgapi.top'
@@ -17,24 +24,15 @@ const instance = axios.create({
 // Request interceptor | 请求拦截器
 instance.interceptors.request.use(
   (config) => {
-    // Get current provider | 获取当前渠道
-    const currentProvider = localStorage.getItem('api-provider') || 'chatfire'
-
-    // Get API keys from new storage | 从新存储结构获取 API Keys
-    let apiKey = ''
-    try {
-      const apiKeysJson = localStorage.getItem('api-keys-by-provider')
-      const apiKeys = apiKeysJson ? JSON.parse(apiKeysJson) : {}
-      apiKey = apiKeys[currentProvider] || ''
-    } catch (e) {
-      apiKey = ''
-    }
+    // Get API key from per-request override or current active token
 
     // Skip auth for certain endpoints | 跳过某些端点的认证
     const noAuthEndpoints = ['/model/page', '/model/fullName', '/model/types']
     const isNoAuth = noAuthEndpoints.some(ep => config.url?.includes(ep))
 
-    if (apiKey && !isNoAuth) {
+    const apiKey = config._tokenApiKey || getCurrentTokenApiKey()
+
+    if (apiKey && !isNoAuth && !config.headers?.Authorization) {
       config.headers['Authorization'] = `Bearer ${apiKey}`
     }
 
@@ -67,28 +65,28 @@ instance.interceptors.response.use(
     }
     
     // Error response | 错误响应
-    window.$message?.error(message || 'Request failed')
-    return Promise.reject(res.data)
+    const bizMessage = message || pickBizMessage(res.data)
+    logApiError({ response: { status: res.status, statusText: res.statusText, data: res.data }, config: res.config }, 'HTTP')
+    if (!res.config?._silentError) {
+      window.$message?.error(bizMessage || 'Request failed')
+    }
+    return Promise.reject(new Error(bizMessage || `Request failed [${res.status}]`))
   },
   (error) => {
-    const { response } = error
-    
-    if (response) {
-      const { status, data } = response
-      const message = data?.message || data?.error?.message || error.message
-      
-      if (status === 401) {
-        window.$message?.error('API Key 无效或已过期')
-      } else if (status === 429) {
-        window.$message?.error('请求过于频繁，请稍后再试')
+    const detailMessage = formatApiErrorMessage(error)
+    const { response, config } = error
+
+    if (!config?._silentError) {
+      if (response?.status === 401) {
+        window.$message?.error(detailMessage || 'API Key 无效或已过期')
+      } else if (response?.status === 429) {
+        window.$message?.error(detailMessage || '请求过于频繁，请稍后再试')
       } else {
-        window.$message?.error(message || '请求失败')
+        window.$message?.error(detailMessage || '请求失败')
       }
-    } else {
-      window.$message?.error(error.message || '网络错误')
     }
-    
-    return Promise.reject(error)
+
+    return Promise.reject(toApiError(error, 'HTTP'))
   }
 )
 

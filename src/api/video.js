@@ -6,25 +6,32 @@ import { request } from '@/utils'
 
 // 创建视频任务
 export const createVideoTask = (data, options = {}) => {
-  const { endpoint = '/videos', requestType = 'json' } = options
+  const { endpoint = '/videos', requestType = 'json', apiKey, silentError } = options
+  const isFormData = data instanceof FormData
+
   return request({
     url: endpoint,
     method: 'post',
     data,
-    headers: requestType === 'formdata'
-      ? { 'Content-Type': 'multipart/form-data' }
+    _tokenApiKey: apiKey,
+    _silentError: silentError,
+    headers: isFormData || requestType === 'formdata'
+      ? {}
       : { 'Content-Type': 'application/json' }
   })
 }
 
 // 查询视频任务状态
 export const getVideoTaskStatus = (taskId, options = {}) => {
-  const { endpoint = '/videos' } = options
+  const { endpoint = '/videos', apiKey, silentError } = options
   return request({
     url: `${endpoint}`,
-    method: 'get'
+    method: 'get',
+    _tokenApiKey: apiKey,
+    _silentError: silentError
   })
 }
+
 // 轮询视频任务直到完成
 export const pollVideoTask = async (taskId, maxAttempts = 120, interval = 5000) => {
   for (let i = 0; i < maxAttempts; i++) {

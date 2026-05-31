@@ -41,7 +41,7 @@
               {{ isPublic ? '已公开: ' + (data.label || '图片') : '点击公开（可被 @ 引用）' }}
             </n-tooltip>
           </div>
-          <div class="flex items-center gap-1">
+          <div class="flex items-center gap-1 nodrag nopan">
             <!-- Replace button | 替换按钮 -->
             <n-tooltip trigger="hover">
               <template #trigger>
@@ -75,7 +75,7 @@
             </n-tooltip>
             <n-tooltip trigger="hover">
               <template #trigger>
-                <button @click="handleDuplicate" class="p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors">
+                <button @click.stop="handleDuplicate" class="nodrag nopan p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors">
                   <n-icon :size="14">
                     <CopyOutline />
                   </n-icon>
@@ -85,7 +85,7 @@
             </n-tooltip>
             <n-tooltip trigger="hover">
               <template #trigger>
-                <button @click="handleDelete" class="p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors">
+                <button @click.stop="handleDelete" class="nodrag nopan p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors">
                   <n-icon :size="14">
                     <TrashOutline />
                   </n-icon>
@@ -102,7 +102,7 @@
       </div>
 
       <!-- Image preview area | 图片预览区域 -->
-      <div class="p-3">
+      <div class="p-3 nodrag nopan">
         <!-- Loading state | 加载状态 -->
         <div v-if="data.loading"
           class="aspect-square rounded-xl bg-gradient-to-br from-cyan-400 via-blue-300 to-amber-200 flex flex-col items-center justify-center gap-3 relative overflow-hidden">

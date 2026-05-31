@@ -236,6 +236,7 @@ const getDefaultNodeData = (type) => {
       return {
         content: '',
         label: '文本输入',
+        model: DEFAULT_CHAT_MODEL,
         publicProps: {}  // 公共属性（可被 @ 引用）
       }
     case 'imageConfig': {
@@ -253,9 +254,10 @@ const getDefaultNodeData = (type) => {
       return {
         prompt: '',
         ratio: videoModel?.defaultParams?.ratio || '16:9',
-        duration: videoModel?.defaultParams?.duration || 5,
+        dur: videoModel?.defaultParams?.duration || 8,
+        resolution: videoModel?.defaultParams?.resolution || '720p',
         model: DEFAULT_VIDEO_MODEL,
-        label: '图生视频'
+        label: '视频生成'
       }
     }
     case 'video':
@@ -293,9 +295,12 @@ export const updateNode = (id, data) => {
 
 // Remove node | 删除节点
 export const removeNode = (id) => {
-  nodes.value = nodes.value.filter(node => node.id !== id)
-  edges.value = edges.value.filter(edge => edge.source !== id && edge.target !== id)
-  saveToHistory() // Save after removing node | 删除节点后保存
+  if (!id) return
+  const nextNodes = nodes.value.filter((node) => node.id !== id)
+  if (nextNodes.length === nodes.value.length) return
+  nodes.value = nextNodes
+  edges.value = edges.value.filter((edge) => edge.source !== id && edge.target !== id)
+  saveToHistory()
 }
 
 // Duplicate node | 复制节点

@@ -21,13 +21,13 @@
           @keydown.escape="cancelEditLabel"
           class="text-sm font-medium bg-[var(--bg-tertiary)] text-[var(--text-secondary)] px-1 rounded outline-none border border-blue-500"
         />
-        <div class="flex items-center gap-1">
-          <button @click="handleDuplicate" class="p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors" title="复制节点">
+        <div class="flex items-center gap-1 nodrag nopan">
+          <button @click.stop="handleDuplicate" class="nodrag nopan p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors" title="复制节点">
             <n-icon :size="14">
               <CopyOutline />
             </n-icon>
           </button>
-          <button @click="handleDelete" class="p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors" title="删除节点">
+          <button @click.stop="handleDelete" class="nodrag nopan p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors" title="删除节点">
             <n-icon :size="14">
               <TrashOutline />
             </n-icon>
@@ -36,20 +36,49 @@
       </div>
 
       <!-- Config options | 配置选项 -->
-      <div class="p-3 space-y-3">
-        <!-- Model selector | 模型选择 -->
-        <div class="flex items-center justify-between">
-          <span class="text-xs text-[var(--text-secondary)]">模型</span>
-          <n-dropdown :options="modelOptions" @select="handleModelSelect">
+      <div class="p-3 space-y-3 nodrag nopan">
+        <!-- Token selector | 令牌选择（优先） -->
+        <NodeTokenSelect
+          v-model="localTokenId"
+          @update:model-value="handleTokenSelect"
+        />
+
+        <!-- Model selector | 模型选择（内置 + 自定义，随令牌过滤） -->
+        <NodeModelSelect
+          v-model="localModel"
+          type="video"
+          :token-id="localTokenId"
+          @update:model-value="handleModelSelect"
+        />
+
+        <!-- Resolution selector | 分辨率选择 -->
+        <div v-if="hasResolutionOptions" class="flex items-center justify-between">
+          <span class="text-xs text-[var(--text-secondary)]">分辨率</span>
+          <n-dropdown :options="resolutionOptions" @select="handleResolutionSelect">
             <button class="flex items-center gap-1 text-sm text-[var(--text-primary)] hover:text-[var(--accent-color)]">
-              {{ displayModelName }}
-              <n-icon :size="12"><ChevronDownOutline /></n-icon>
+              {{ displayResolution }}
+              <n-icon :size="12">
+                <ChevronForwardOutline />
+              </n-icon>
+            </button>
+          </n-dropdown>
+        </div>
+
+        <!-- Size selector (Sora 等) | 尺寸选择 -->
+        <div v-if="hasSizeOptions" class="flex items-center justify-between">
+          <span class="text-xs text-[var(--text-secondary)]">尺寸</span>
+          <n-dropdown :options="sizeOptions" @select="handleSizeSelect">
+            <button class="flex items-center gap-1 text-sm text-[var(--text-primary)] hover:text-[var(--accent-color)]">
+              {{ displaySize }}
+              <n-icon :size="12">
+                <ChevronForwardOutline />
+              </n-icon>
             </button>
           </n-dropdown>
         </div>
 
         <!-- Aspect ratio selector | 宽高比选择 -->
-        <div class="flex items-center justify-between">
+        <div v-if="hasRatioOptions" class="flex items-center justify-between">
           <span class="text-xs text-[var(--text-secondary)]">比例</span>
           <n-dropdown :options="ratioOptions" @select="handleRatioSelect">
             <button class="flex items-center gap-1 text-sm text-[var(--text-primary)] hover:text-[var(--accent-color)]">
@@ -81,17 +110,19 @@
             :class="connectedPrompt ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-500 dark:bg-gray-800'">
             提示词 {{ connectedPrompt ? '✓' : '○' }}
           </span>
-          <span class="px-2 py-0.5 rounded-full"
-            :class="imagesByRole.firstFrame ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' : 'bg-gray-100 text-gray-500 dark:bg-gray-800'">
-            首帧 {{ imagesByRole.firstFrame ? '✓' : '○' }}
-          </span>
-          <span class="px-2 py-0.5 rounded-full"
-            :class="imagesByRole.lastFrame ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' : 'bg-gray-100 text-gray-500 dark:bg-gray-800'">
-            尾帧 {{ imagesByRole.lastFrame ? '✓' : '○' }}
-          </span>
+          <template v-if="!isSoraModel">
+            <span class="px-2 py-0.5 rounded-full"
+              :class="imagesByRole.firstFrame ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' : 'bg-gray-100 text-gray-500 dark:bg-gray-800'">
+              首帧 {{ imagesByRole.firstFrame ? '✓' : '○' }}
+            </span>
+            <span class="px-2 py-0.5 rounded-full"
+              :class="imagesByRole.lastFrame ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' : 'bg-gray-100 text-gray-500 dark:bg-gray-800'">
+              尾帧 {{ imagesByRole.lastFrame ? '✓' : '○' }}
+            </span>
+          </template>
           <span class="px-2 py-0.5 rounded-full"
             :class="imagesByRole.referenceImages.length > 0 ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-gray-100 text-gray-500 dark:bg-gray-800'">
-            参考图 {{ imagesByRole.referenceImages.length > 0 ? `✓ ${imagesByRole.referenceImages.length}` : '○' }}
+            参考图 {{ imagesByRole.referenceImages.length > 0 ? '✓' : '○' }}
           </span>
         </div>
 
@@ -150,8 +181,11 @@ import { ChevronForwardOutline, ChevronDownOutline, TrashOutline, VideocamOutlin
 import { useVideoGeneration } from '../../hooks'
 import { updateNode, removeNode, duplicateNode, addNode, addEdge, nodes, edges } from '../../stores/canvas'
 import NodeHandleMenu from './NodeHandleMenu.vue'
+import NodeTokenSelect from './NodeTokenSelect.vue'
+import NodeModelSelect from './NodeModelSelect.vue'
 import { useModelStore } from '../../stores/pinia'
-import { getModelRatioOptions, getModelDurationOptions, getModelConfig, DEFAULT_VIDEO_MODEL } from '../../stores/models'
+import { getModelRatioOptions, getModelDurationOptions, getModelResolutionOptions, getModelVideoSizeOptions, getModelConfig, DEFAULT_VIDEO_MODEL } from '../../stores/models'
+import { isSoraVideoModel } from '../../utils/soraVideo'
 
 // 使用 Pinia store 获取模型选项（根据渠道过滤）
 const modelStore = useModelStore()
@@ -174,8 +208,11 @@ const { loading, error, status, video: generatedVideo, progress, createVideoTask
 const showHandleMenu = ref(false)
 const isGenerating = ref(false)  // 任务创建中状态
 const localModel = ref(props.data?.model || DEFAULT_VIDEO_MODEL)
+const localTokenId = ref(props.data?.tokenId || '')
 const localRatio = ref(props.data?.ratio || '16:9')
-const localDuration = ref(props.data?.dur || 5)
+const localDuration = ref(props.data?.dur || 8)
+const localResolution = ref(props.data?.resolution || '720p')
+const localSize = ref(props.data?.size || '1280x720')
 
 // Label editing state | Label 编辑状态
 const isEditingLabel = ref(false)
@@ -205,42 +242,60 @@ const connectedImages = computed(() => {
 
 // Get images by role | 按角色获取图片
 const imagesByRole = computed(() => {
+  if (isSoraModel.value) {
+    const ref = connectedImages.value.find(
+      (img) => img.role === 'input_reference' || img.role === 'first_frame_image'
+    )
+    return {
+      firstFrame: null,
+      lastFrame: null,
+      referenceImages: ref ? [ref] : [],
+    }
+  }
+
   const firstFrame = connectedImages.value.find(img => img.role === 'first_frame_image')
   const lastFrame = connectedImages.value.find(img => img.role === 'last_frame_image')
   const referenceImages = connectedImages.value.filter(img => img.role === 'input_reference')
 
-  return {
-    firstFrame,
-    lastFrame,
-    referenceImages
-  }
+  return { firstFrame, lastFrame, referenceImages }
 })
 
 // Get current model config | 获取当前模型配置
 const currentModelConfig = computed(() => getModelConfig(localModel.value))
 
-// Model options from Pinia store (filtered by provider) | 从 Pinia store 获取模型选项（根据渠道过滤）
-const modelOptions = computed(() => modelStore.allVideoModelOptions)
+const isSoraModel = computed(() => isSoraVideoModel(localModel.value))
 
-// Display model name | 显示模型名称
-const displayModelName = computed(() => {
-  const model = modelOptions.value.find(m => m.key === localModel.value)
-  // 如果当前模型不在选项中，尝试从 allVideoModels 找到
-  if (!model) {
-    const allModel = modelStore.allVideoModels.find(m => m.key === localModel.value)
-    return allModel?.label || localModel.value || '选择模型'
-  }
-  return model?.label || localModel.value || '选择模型'
+// Resolution options based on model | 基于模型的分辨率选项
+const resolutionOptions = computed(() => getModelResolutionOptions(localModel.value))
+
+const hasResolutionOptions = computed(() => {
+  const config = currentModelConfig.value
+  return !!(config?.resolutionOptions?.length || config?.resolutions?.length)
+})
+
+const displayResolution = computed(() => {
+  const option = resolutionOptions.value.find(o => o.key === localResolution.value)
+  return option?.label || localResolution.value
+})
+
+// Size options (Sora) | 尺寸选项
+const sizeOptions = computed(() => getModelVideoSizeOptions(localModel.value))
+
+const hasSizeOptions = computed(() => sizeOptions.value.length > 0)
+
+const displaySize = computed(() => {
+  const option = sizeOptions.value.find(o => o.key === localSize.value)
+  return option?.label || localSize.value
 })
 
 // Ratio options based on model | 基于模型的比例选项
-const ratioOptions = computed(() => {
-  return getModelRatioOptions(localModel.value)
-})
+const ratioOptions = computed(() => getModelRatioOptions(localModel.value))
 
-// Duration options based on model | 基于模型的时长选项
+const hasRatioOptions = computed(() => ratioOptions.value.length > 0)
+
+// Duration options based on model and resolution | 基于模型与分辨率的时长选项
 const durationOptions = computed(() => {
-  return getModelDurationOptions(localModel.value)
+  return getModelDurationOptions(localModel.value, localResolution.value)
 })
 
 // Handle model selection | 处理模型选择
@@ -257,7 +312,39 @@ const handleModelSelect = (key) => {
     localDuration.value = config.defaultParams.duration
     updates.dur = config.defaultParams.duration
   }
+  if (config?.defaultParams?.resolution) {
+    localResolution.value = config.defaultParams.resolution
+    updates.resolution = config.defaultParams.resolution
+  }
+  if (config?.defaultParams?.size) {
+    localSize.value = config.defaultParams.size
+    updates.size = config.defaultParams.size
+  }
+  syncDurationToResolution()
+  updates.dur = localDuration.value
   updateNode(props.id, updates)
+}
+
+const syncDurationToResolution = () => {
+  const options = getModelDurationOptions(localModel.value, localResolution.value)
+  if (!options.some((o) => o.key === localDuration.value)) {
+    localDuration.value = options[0]?.key ?? 8
+    updateNode(props.id, { dur: localDuration.value })
+  }
+}
+
+const handleTokenSelect = (tokenId) => {
+  localTokenId.value = tokenId
+  updateNode(props.id, { tokenId: tokenId || null })
+  syncModelToToken()
+}
+
+const syncModelToToken = () => {
+  const models = modelStore.getNodeTokenModels('video', localTokenId.value)
+  if (!models.length) return
+  if (!models.some((m) => m.key === localModel.value)) {
+    handleModelSelect(models[0].key)
+  }
 }
 
 // Handle duplicate | 处理复制
@@ -269,6 +356,19 @@ const handleDuplicate = () => {
       updateNodeInternals(newNodeId)
     }, 50)
   }
+}
+
+// Handle resolution selection | 处理分辨率选择
+const handleResolutionSelect = (key) => {
+  localResolution.value = key
+  syncDurationToResolution()
+  updateNode(props.id, { resolution: key, dur: localDuration.value })
+}
+
+// Handle size selection | 处理尺寸选择
+const handleSizeSelect = (key) => {
+  localSize.value = key
+  updateNode(props.id, { size: key })
 }
 
 // Handle ratio selection | 处理比例选择
@@ -290,7 +390,8 @@ const getConnectedInputs = () => {
   let prompt = ''
   let first_frame_image = ''
   let last_frame_image = ''
-  const images = [] // input_reference images | 参考图
+  let input_reference = ''
+  const images = []
 
   for (const edge of connectedEdges) {
     const sourceNode = nodes.value.find(n => n.id === edge.source)
@@ -299,14 +400,17 @@ const getConnectedInputs = () => {
     if (sourceNode.type === 'text') {
       prompt = sourceNode.data?.content || ''
     } else if (sourceNode.type === 'llmConfig') {
-      // LLM node output as prompt | LLM 节点输出作为提示词
       const content = sourceNode.data?.outputContent || ''
       if (content) prompt = content
     } else if (sourceNode.type === 'image' && sourceNode.data?.url) {
       const imageData = sourceNode.data.base64 || sourceNode.data.url
       const role = edge.data?.imageRole || 'first_frame_image'
 
-      if (role === 'first_frame_image') {
+      if (isSoraModel.value) {
+        if (role === 'input_reference' || role === 'first_frame_image') {
+          if (!input_reference) input_reference = imageData
+        }
+      } else if (role === 'first_frame_image') {
         first_frame_image = imageData
       } else if (role === 'last_frame_image') {
         last_frame_image = imageData
@@ -316,7 +420,7 @@ const getConnectedInputs = () => {
     }
   }
 
-  return { prompt, first_frame_image, last_frame_image, images }
+  return { prompt, first_frame_image, last_frame_image, input_reference, images }
 }
 
 // Computed connected prompt | 计算连接的提示词
@@ -332,13 +436,21 @@ const handleGenerate = async () => {
   // 设置生成中状态
   isGenerating.value = true
 
-  const { prompt, first_frame_image, last_frame_image, images } = getConnectedInputs()
+  const { prompt, first_frame_image, last_frame_image, input_reference, images } = getConnectedInputs()
 
-  const hasInput = prompt || first_frame_image || last_frame_image || images.length > 0
-  if (!hasInput) {
-    window.$message?.warning('请先连接文本节点或图片节点')
-    isGenerating.value = false
-    return
+  if (isSoraModel.value) {
+    if (!prompt) {
+      window.$message?.warning('Sora 2 需要连接提示词')
+      isGenerating.value = false
+      return
+    }
+  } else {
+    const hasInput = prompt || first_frame_image || last_frame_image || images.length > 0
+    if (!hasInput) {
+      window.$message?.warning('请先连接文本节点或图片节点')
+      isGenerating.value = false
+      return
+    }
   }
 
   if (!isConfigured.value) {
@@ -377,7 +489,8 @@ const handleGenerate = async () => {
     // Build request params (raw form data) | 构建请求参数（原始表单数据）
     // These will be transformed by inputTransform | 这些会被 inputTransform 转换
     const params = {
-      model: localModel.value
+      model: localModel.value,
+      tokenId: localTokenId.value || undefined
     }
 
     // Add prompt if provided | 如果有提示词则添加
@@ -385,23 +498,18 @@ const handleGenerate = async () => {
       params.prompt = prompt
     }
 
-    // Add first frame image | 添加首帧图片
-    if (first_frame_image) {
-      params.first_frame_image = first_frame_image
+    if (isSoraModel.value) {
+      if (input_reference) params.input_reference = input_reference
+    } else {
+      if (first_frame_image) params.first_frame_image = first_frame_image
+      if (last_frame_image) params.last_frame_image = last_frame_image
+      if (images.length > 0) params.images = images
     }
 
-    // Add last frame image | 添加尾帧图片
-    if (last_frame_image) {
-      params.last_frame_image = last_frame_image
-    }
-
-    // Add reference images (input_reference) | 添加参考图
-    if (images.length > 0) {
-      params.images = images
-    }
-
-    // Add ratio/size | 添加比例参数
-    if (localRatio.value) {
+    // Add ratio/size | 添加比例或尺寸参数
+    if (hasSizeOptions.value && localSize.value) {
+      params.size = localSize.value
+    } else if (localRatio.value) {
       params.ratio = localRatio.value
     }
 
@@ -410,8 +518,13 @@ const handleGenerate = async () => {
       params.dur = localDuration.value
     }
 
+    // Add resolution | 添加分辨率（Veo）
+    if (hasResolutionOptions.value && localResolution.value) {
+      params.resolution = localResolution.value
+    }
+
     // 只创建任务，获取 taskId，不在这里轮询
-    const { taskId: newTaskId, url } = await createVideoTaskOnly(params)
+    const { taskId: newTaskId, url, tokenId } = await createVideoTaskOnly(params)
 
     // 如果有直接 URL，更新视频节点
     if (url) {
@@ -420,6 +533,7 @@ const handleGenerate = async () => {
         loading: false,
         label: '视频生成',
         model: localModel.value,
+        tokenId: tokenId || null,
         updatedAt: Date.now()
       })
       window.$message?.success('视频生成成功')
@@ -429,6 +543,7 @@ const handleGenerate = async () => {
       // 需要轮询，传递 taskId 给 VideoNode
       updateNode(videoNodeId, {
         taskId: newTaskId,
+        tokenId: tokenId || null,
         loading: true,
         label: '视频生成中...',
         model: localModel.value,
@@ -483,13 +598,19 @@ const handleDelete = () => {
 
 // Initialize on mount | 挂载时初始化
 onMounted(() => {
+  const config = getModelConfig(localModel.value)
+  if (config?.defaultParams?.resolution && !props.data?.resolution) {
+    localResolution.value = config.defaultParams.resolution
+  }
+  syncDurationToResolution()
+
   // 检查当前模型是否在可用模型列表中
-  const availableModels = modelStore.availableVideoModels
+  const availableModels = modelStore.getNodeTokenModels('video', localTokenId.value)
   const isModelAvailable = availableModels.some(m => m.key === localModel.value)
 
   if (!localModel.value || !isModelAvailable) {
-    // 使用 store 中的默认模型或第一个可用模型
-    localModel.value = modelStore.selectedVideoModel || availableModels[0]?.key || DEFAULT_VIDEO_MODEL
+    const next = availableModels[0]?.key || DEFAULT_VIDEO_MODEL
+    localModel.value = next
     updateNode(props.id, { model: localModel.value })
   }
 })
@@ -498,6 +619,12 @@ onMounted(() => {
 watch(() => props.data?.model, (newModel) => {
   if (newModel && newModel !== localModel.value) {
     localModel.value = newModel
+    const config = getModelConfig(newModel)
+    if (config?.defaultParams?.ratio) localRatio.value = config.defaultParams.ratio
+    if (config?.defaultParams?.duration) localDuration.value = config.defaultParams.duration
+    if (config?.defaultParams?.resolution) localResolution.value = config.defaultParams.resolution
+    if (config?.defaultParams?.size) localSize.value = config.defaultParams.size
+    syncDurationToResolution()
   }
 })
 

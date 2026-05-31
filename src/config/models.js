@@ -36,6 +36,7 @@ export const SEEDREAM_QUALITY_OPTIONS = [
 ]
 
 export const BANANA_SIZE_OPTIONS = [
+    { label: 'Auto', key: 'auto' },
     { label: '16:9', key: '16x9' },
     { label: '4:3', key: '4x3' },
     { label: '3:2', key: '3x2' },
@@ -45,71 +46,216 @@ export const BANANA_SIZE_OPTIONS = [
     { label: '9:16', key: '9x16' },
 ]
 
+// Banana 分辨率选项 | Gemini 绘图 image_size
+export const BANANA_RESOLUTION_OPTIONS = [
+    { label: '1K', key: '1K' },
+    { label: '2K', key: '2K' },
+    { label: '4K', key: '4K' },
+]
+
+export const BANANA_CHAT_IMAGE_MODELS = ['nano-banana-2', 'nano-banana-pro']
+
+export const isBananaChatImageModel = (modelKey) => BANANA_CHAT_IMAGE_MODELS.includes(modelKey)
+
+// GPT Image 尺寸选项 | gpt-image-2 size
+export const GPT_IMAGE_SIZE_OPTIONS = [
+    { label: 'Auto（默认）', key: 'auto' },
+    { label: '1024×1024 正方形', key: '1024x1024' },
+    { label: '1536×1024 横版', key: '1536x1024' },
+    { label: '1024×1536 竖版', key: '1024x1536' },
+    { label: '2048×2048 2K正方形', key: '2048x2048' },
+    { label: '2048×1152 2K横版', key: '2048x1152' },
+    { label: '3840×2160 4K横版', key: '3840x2160' },
+    { label: '2160×3840 4K竖版', key: '2160x3840' },
+]
+
+// GPT Image 画质选项 | gpt-image-2 quality
+export const GPT_IMAGE_QUALITY_OPTIONS = [
+    { label: 'Auto（默认）', key: 'auto' },
+    { label: 'Low', key: 'low' },
+    { label: 'Medium', key: 'medium' },
+    { label: 'High', key: 'high' },
+]
+
+export const GPT_IMAGE_MODELS = ['gpt-image-2']
+
+export const isGptImageModel = (modelKey) => GPT_IMAGE_MODELS.includes(modelKey)
+
+export const hasIndependentQualitySize = (config) =>
+    config?.imageApi === 'chat-completions' || config?.imageApi === 'openai-generations'
+
+const SEEDREAM_IMAGE_CONFIG = {
+    provider: ['chatfire'],
+    imageApi: 'seedream-generations',
+    sizes: SEEDREAM_SIZE_OPTIONS.map(s => s.key),
+    qualities: SEEDREAM_QUALITY_OPTIONS,
+    getSizesByQuality: (quality) => quality === '4k' ? SEEDREAM_4K_SIZE_OPTIONS : SEEDREAM_SIZE_OPTIONS,
+    defaultParams: {
+        size: '2048x2048',
+        quality: 'standard',
+        style: 'vivid'
+    }
+}
+
 // Image generation models | 图片生成模型
 export const IMAGE_MODELS = [
     {
+        label: 'GPT Image 2',
+        key: 'gpt-image-2',
+        apiModel: 'gpt-image-2',
+        provider: ['chatfire', 'openai'],
+        imageApi: 'openai-generations',
+        sizeOptions: GPT_IMAGE_SIZE_OPTIONS,
+        sizes: GPT_IMAGE_SIZE_OPTIONS.map(s => s.key),
+        qualities: GPT_IMAGE_QUALITY_OPTIONS,
+        defaultParams: {
+            size: 'auto',
+            quality: 'auto',
+            response_format: 'url',
+            output_format: 'png',
+            background: 'auto',
+            moderation: 'auto',
+            n: 1,
+        }
+    },
+    {
         label: 'Nano Banana 2',
         key: 'nano-banana-2',
-        provider: ['chatfire'], // 火宝渠道
+        apiModel: 'gemini-3.1-flash-image-preview',
+        provider: ['chatfire'],
+        imageApi: 'chat-completions',
+        sizeOptions: BANANA_SIZE_OPTIONS,
         sizes: BANANA_SIZE_OPTIONS.map(s => s.key),
-        // qualities: SEEDREAM_QUALITY_OPTIONS,
-        // getSizesByQuality: (quality) => quality === '4k' ? SEEDREAM_4K_SIZE_OPTIONS : SEEDREAM_SIZE_OPTIONS,
+        qualities: BANANA_RESOLUTION_OPTIONS,
         defaultParams: {
             size: '1x1',
-            quality: 'standard',
-            style: 'vivid'
+            quality: '1K',
         }
     },
     {
         label: 'Nano Banana Pro',
         key: 'nano-banana-pro',
-        provider: ['chatfire'], // 火宝渠道
+        apiModel: 'gemini-3-pro-image-preview',
+        provider: ['chatfire'],
+        imageApi: 'chat-completions',
+        sizeOptions: BANANA_SIZE_OPTIONS,
         sizes: BANANA_SIZE_OPTIONS.map(s => s.key),
-        // qualities: SEEDREAM_QUALITY_OPTIONS,
-        // getSizesByQuality: (quality) => quality === '4k' ? SEEDREAM_4K_SIZE_OPTIONS : SEEDREAM_SIZE_OPTIONS,
+        qualities: BANANA_RESOLUTION_OPTIONS,
         defaultParams: {
             size: '1x1',
-            quality: 'standard',
-            style: 'vivid'
+            quality: '1K',
         }
     },
     {
         label: '豆包 Seedream 4.5',
         key: 'doubao-seedream-4-5-251128',
-        provider: ['chatfire'], // 火宝渠道
-        sizes: SEEDREAM_SIZE_OPTIONS.map(s => s.key),
-        qualities: SEEDREAM_QUALITY_OPTIONS,
-        getSizesByQuality: (quality) => quality === '4k' ? SEEDREAM_4K_SIZE_OPTIONS : SEEDREAM_SIZE_OPTIONS,
-        defaultParams: {
-            size: '2048x2048',
-            quality: 'standard',
-            style: 'vivid'
-        }
+        apiModel: 'jimeng-4.5',
+        ...SEEDREAM_IMAGE_CONFIG,
     },
     {
-        label: 'Nano Banana',
-        key: 'nano-banana',
-        provider: ['chatfire'], // 火宝渠道
-        tips: '尺寸写在提示词中: 尺寸 9:16',
-        sizes: [],
-        defaultParams: {
-            quality: 'standard',
-            style: 'vivid'
-        }
+        label: '豆包 Seedream 4.6',
+        key: 'seedream-4.6',
+        apiModel: 'seedream-4.6',
+        ...SEEDREAM_IMAGE_CONFIG,
+    },
+    {
+        label: '豆包 Seedream 4.7',
+        key: 'seedream-4.7',
+        apiModel: 'seedream-4.7',
+        ...SEEDREAM_IMAGE_CONFIG,
+    },
+    {
+        label: '豆包 Seedream 5.0',
+        key: 'seedream-5.0',
+        apiModel: 'seedream-5.0',
+        ...SEEDREAM_IMAGE_CONFIG,
     },
 
 ]
 
 // Video ratio options | 视频比例选项
 export const VIDEO_RATIO_LIST = [
-    { label: '16:9 (横版)', key: '16x9' },
-    { label: '4:3', key: '4x3' },
-    { label: '1:1 (方形)', key: '1x1' },
-    { label: '3:4', key: '3x4' },
-    { label: '9:16 (竖版)', key: '9x16' }
+    { label: '16:9 (横版)', key: '16:9' },
+    { label: '4:3', key: '4:3' },
+    { label: '1:1 (方形)', key: '1:1' },
+    { label: '3:4', key: '3:4' },
+    { label: '9:16 (竖版)', key: '9:16' }
 ]
 
-// Video resolution options for Seedance | Seedance 分辨率选项
+// Veo 分辨率选项
+export const VEO_VIDEO_RESOLUTION_OPTIONS = [
+    { label: '480p', key: '480p' },
+    { label: '720p', key: '720p' },
+    { label: '1080p', key: '1080p' },
+    { label: '4K', key: '4k' },
+]
+
+export const VEO_DURATION_OPTIONS = [
+    { label: '4 秒', key: 4 },
+    { label: '6 秒', key: 6 },
+    { label: '8 秒', key: 8 },
+]
+
+export const VEO_4K_DURATION_OPTIONS = [{ label: '8 秒', key: 8 }]
+
+// Sora 2 尺寸选项（固定 720p，不可选分辨率档位）
+export const SORA_VIDEO_SIZE_OPTIONS = [
+    { label: '1280×720 横版', key: '1280x720' },
+    { label: '720×1280 竖版', key: '720x1280' },
+]
+
+export const SORA_DURATION_OPTIONS = [
+    { label: '4 秒', key: 4 },
+    { label: '8 秒', key: 8 },
+    { label: '12 秒', key: 12 },
+]
+
+const VEO_VIDEO_CONFIG = {
+    provider: ['chatfire'],
+    videoApi: 'veo-videos',
+    ratios: ['16:9'],
+    resolutions: VEO_VIDEO_RESOLUTION_OPTIONS.map((r) => r.key),
+    resolutionOptions: VEO_VIDEO_RESOLUTION_OPTIONS,
+    getDurationsByResolution: (resolution) =>
+        resolution === '4k' ? VEO_4K_DURATION_OPTIONS : VEO_DURATION_OPTIONS,
+    defaultParams: { ratio: '16:9', duration: 8, resolution: '720p' },
+    async: true,
+}
+
+export const SEEDANCE_2_RESOLUTION_OPTIONS = [
+    { label: '480p', key: '480p' },
+    { label: '720p', key: '720p' },
+]
+
+export const SEEDANCE_2_DURATION_OPTIONS = Array.from({ length: 12 }, (_, i) => ({
+    label: `${i + 4} 秒`,
+    key: i + 4,
+}))
+
+const SEEDANCE_2_VIDEO_CONFIG = {
+    provider: ['chatfire'],
+    videoApi: 'seedance2-generations',
+    ratios: ['16:9', '9:16', '1:1'],
+    resolutions: SEEDANCE_2_RESOLUTION_OPTIONS.map((r) => r.key),
+    resolutionOptions: SEEDANCE_2_RESOLUTION_OPTIONS,
+    durs: SEEDANCE_2_DURATION_OPTIONS,
+    defaultParams: { ratio: '16:9', duration: 5, resolution: '720p' },
+    async: true,
+}
+
+const SORA_VIDEO_CONFIG = {
+    provider: ['chatfire'],
+    videoApi: 'sora-videos',
+    supportsFirstLastFrame: false,
+    imageRoles: ['input_reference'],
+    sizeOptions: SORA_VIDEO_SIZE_OPTIONS,
+    sizes: SORA_VIDEO_SIZE_OPTIONS.map((s) => s.key),
+    durs: SORA_DURATION_OPTIONS,
+    defaultParams: { size: '1280x720', duration: 8 },
+    async: true,
+}
+
+// Video resolution options for Seedance | Seedance 分辨率选项（兼容自定义模型）
 export const SEEDANCE_RESOLUTION_OPTIONS = [
     { label: '480p', key: '480p' },
     { label: '720p', key: '720p' },
@@ -118,112 +264,42 @@ export const SEEDANCE_RESOLUTION_OPTIONS = [
 
 // Video generation models | 视频生成模型
 export const VIDEO_MODELS = [
-     // Seedance 模型 - 1.5 Pro
     {
-        label: 'Seedance 1.5 Pro (图文视频)',
-        key: 'doubao-seedance-1-5-pro-251215',
-        provider: ['chatfire'],
-        type: 't2v+i2v',
-        ratios: ['16:9', '4:3', '1:1', '3:4', '9:16', '21:9'],
-        durs: [{ label: '5 秒', key: 5 }, { label: '10 秒', key: 10 }],
-        resolutions: ['480p', '720p', '1080p'],
-        defaultResolution: '1080p',
-        defaultParams: { ratio: '16:9', duration: 10, resolution: '1080p' }
+        label: 'Veo 3.1 Generate Preview',
+        key: 'veo-3.1-generate-preview',
+        ...VEO_VIDEO_CONFIG,
     },
-    // Seedance 模型 - 文生视频
     {
-        label: 'Seedance 1.0 Lite (文生视频)',
-        key: 'doubao-seedance-1-0-lite-t2v-250428',
-        provider: ['chatfire'],
-        type: 't2v', // 文生视频
-        ratios: ['16:9', '4:3', '1:1', '3:4', '9:16', '21:9'],
-        durs: [{ label: '5 秒', key: 5 }, { label: '10 秒', key: 10 }],
-        resolutions: ['480p', '720p', '1080p'],
-        defaultResolution: '720p',
-        defaultParams: { ratio: '16:9', duration: 5, resolution: '720p' }
+        label: 'Veo 3.1 Fast Generate Preview',
+        key: 'veo-3.1-fast-generate-preview',
+        ...VEO_VIDEO_CONFIG,
     },
-    // Seedance 模型 - 图生视频
     {
-        label: 'Seedance 1.0 Lite (图生视频)',
-        key: 'doubao-seedance-1-0-lite-i2v-250428',
-        provider: ['chatfire'],
-        type: 'i2v', // 图生视频
-        ratios: ['16:9'],
-        durs: [{ label: '5 秒', key: 5 }, { label: '10 秒', key: 10 }],
-        resolutions: ['480p', '720p', '1080p'],
-        defaultResolution: '720p',
-        defaultParams: { ratio: '16:9', duration: 5, resolution: '720p' }
+        label: 'Sora 2',
+        key: 'sora-2',
+        ...SORA_VIDEO_CONFIG,
     },
-    // Seedance 模型 - 图文视频 Pro
     {
-        label: 'Seedance 1.0 Pro (图文视频)',
-        key: 'doubao-seedance-1-0-pro-250528',
-        provider: ['chatfire'],
-        type: 't2v+i2v', // 图文视频
-        ratios: ['16:9', '4:3', '1:1', '3:4', '9:16', '21:9', '16:9'],
-        durs: [{ label: '5 秒', key: 5 }, { label: '10 秒', key: 10 }],
-        resolutions: ['480p', '720p', '1080p'],
-        defaultResolution: '1080p',
-        defaultParams: { ratio: '16:9', duration: 5, resolution: '1080p' }
+        label: 'Seedance 2.0 Fast',
+        key: 'doubao-seedance-2-0-fast-260128',
+        ...SEEDANCE_2_VIDEO_CONFIG,
     },
-   
-    // Seedance 模型 - 1.0 Pro Fast
     {
-        label: 'Seedance 1.0 Pro Fast (图文视频)',
-        key: 'doubao-seedance-1-0-pro-fast-251015',
-        provider: ['chatfire'],
-        type: 't2v+i2v',
-        ratios: ['16:9', '4:3', '1:1', '3:4', '9:16', '21:9'],
-        durs: [{ label: '5 秒', key: 5 }, { label: '10 秒', key: 10 }],
-        resolutions: ['480p', '720p', '1080p'],
-        defaultResolution: '1080p',
-        defaultParams: { ratio: '16:9', duration: 5, resolution: '1080p' }
+        label: 'Seedance 2.0',
+        key: 'doubao-seedance-2-0-260128',
+        ...SEEDANCE_2_VIDEO_CONFIG,
     },
-    // 可灵 Kling
-    // {
-    //     label: '可灵 Kling v2.5-turbo',
-    //     key: 'kling-v2-1',
-    //     provider: ['chatfire'], // 仅火宝渠道
-    //     ratios: VIDEO_RATIO_LIST.map(s => s.key),
-    //     durs: [{ label: '5 秒', key: 5 }, { label: '10 秒', key: 10 }],
-    //     defaultParams: { ratio: '9:16', duration: 10 }
-    // },
-    // {
-    //     label: 'runway/gen4-turbo',
-    //     key: 'runway/gen4-turbo',
-    //     ratios: VIDEO_RATIO_LIST.map(s => s.key),
-    //     durs: [{ label: '5 秒', key: 5 }, { label: '10 秒', key: 10 }],
-    //     defaultParams: { ratio: '16:9', duration: 5 }
-    // },
-    // {
-    //     label: '可灵视频 O1',
-    //     key: 'kling-video-o1',
-    //     ratios: VIDEO_RATIO_LIST.map(s => s.key),
-    //     durs: [{ label: '5 秒', key: 5 }, { label: '10 秒', key: 10 }],
-    //     defaultParams: { ratio: '16:9', duration: 5 }
-    // },
-    // {
-    //     label: 'viduq2-pro_720p', key: 'viduq2-pro_720p',
-    //     ratios: VIDEO_RATIO_LIST.map(s => s.key),
-    //     durs: [{ label: '5 秒', key: 5 }, { label: '10 秒', key: 10 }],
-    //     defaultParams: { ratio: '16:9', duration: 5 }
-    // },
-    // {
-    //     label: 'Sora 2', key: 'sora-2',
-    //     ratios: VIDEO_RATIO_LIST.map(s => s.key),
-    //     durs: [{ label: '5 秒', key: 5 }, { label: '10 秒', key: 10 }],
-    //     defaultParams: { ratio: '16:9', duration: 5 }
-    // }
 ]
 
 // Chat/LLM models | 对话模型
 export const CHAT_MODELS = [
+    { label: 'Gemini 3.1 Pro Preview', key: 'gemini-3.1-pro-preview', provider: ['openai', 'chatfire'] },
+    { label: 'Gemini 3 Pro Preview', key: 'gemini-3-pro-preview', provider: ['openai', 'chatfire'] },
+    { label: 'GPT-5.5', key: 'gpt-5.5', provider: ['openai'] },
+    { label: 'GPT-5.4 Mini', key: 'gpt-5.4-mini', provider: ['openai'] },
+    { label: 'DeepSeek V4 Flash', key: 'deepseek-v4-flash', provider: ['openai', 'chatfire'] },
+    { label: 'DeepSeek V4 Pro', key: 'deepseek-v4-pro', provider: ['openai', 'chatfire'] },
     { label: 'GPT-4o Mini', key: 'gpt-4o-mini', provider: ['openai'] },
-    { label: 'GPT-4o', key: 'gpt-4o', provider: ['openai'] },
-    { label: 'GPT-5.2', key: 'gpt-5.2', provider: ['openai'] },
-    { label: 'DeepSeek Chat', key: 'deepseek-chat', provider: ['openai', 'chatfire'] },
-    { label: '豆包 Seed Flash', key: 'doubao-seed-1-6-flash-250615', provider: ['chatfire'] },
-    { label: 'Gemini 3 Pro', key: 'gemini-3-pro', provider: ['openai'] }
 ]
 
 // Image size options | 图片尺寸选项
@@ -256,7 +332,7 @@ export const VIDEO_DURATION_OPTIONS = [
 
 // Default values | 默认值
 export const DEFAULT_IMAGE_MODEL = 'nano-banana-pro'
-export const DEFAULT_VIDEO_MODEL = 'doubao-seedance-1-5-pro-251215'
+export const DEFAULT_VIDEO_MODEL = 'veo-3.1-generate-preview'
 export const DEFAULT_CHAT_MODEL = 'gpt-4o-mini'
 export const DEFAULT_IMAGE_SIZE = '2048x2048'
 export const DEFAULT_VIDEO_RATIO = '16:9'

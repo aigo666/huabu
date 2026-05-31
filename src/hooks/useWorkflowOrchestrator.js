@@ -10,6 +10,11 @@
 
 import { ref, watch } from 'vue'
 import { streamChatCompletions } from '@/api'
+import {
+  executeWithModelTokens,
+  adaptRequestForToken,
+  getTokenEndpoints
+} from '@/utils/tokenRequest'
 import { 
   nodes, 
   addNode, 
@@ -307,16 +312,36 @@ export const useWorkflowOrchestrator = () => {
     isAnalyzing.value = true
     
     try {
-      let response = ''
-      for await (const chunk of streamChatCompletions({
-        model: 'gpt-4o',
+      const modelKey = 'gpt-4o-mini'
+      const requestBody = {
+        model: modelKey,
         messages: [
           { role: 'system', content: INTENT_ANALYSIS_PROMPT },
           { role: 'user', content: userInput }
         ]
-      })) {
-        response += chunk
       }
+
+      const { result: response } = await executeWithModelTokens({
+        modelKey,
+        type: 'chat',
+        requestFn: async (token) => {
+          const endpoints = getTokenEndpoints(token)
+          const url = new URL(endpoints.chat)
+          let collected = ''
+          for await (const chunk of streamChatCompletions(
+            adaptRequestForToken(token, 'chat', requestBody),
+            undefined,
+            {
+              apiKey: token.apiKey,
+              baseUrl: url.origin,
+              endpoint: url.pathname
+            }
+          )) {
+            collected += chunk
+          }
+          return collected
+        }
+      })
       
       const jsonMatch = response.match(/\{[\s\S]*\}/)
       if (!jsonMatch) {

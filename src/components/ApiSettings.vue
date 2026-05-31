@@ -1,185 +1,116 @@
 <template>
-  <!-- API Settings Modal | API 设置弹窗 -->
-  <n-modal v-model:show="showModal" preset="card" title="API 设置" style="width: 560px;">
-    <n-tabs type="line" animated>
-      <!-- API 配置标签 -->
-      <n-tab-pane name="api" tab="API 配置">
-        <n-form ref="formRef" :model="formData" label-placement="left" label-width="80">
-          <n-form-item label="渠道" path="provider">
-            <n-select
-              v-model:value="formData.provider"
-              :options="providerOptions"
-              placeholder="选择 API 渠道"
-            />
+  <n-modal v-model:show="showModal" preset="card" title="API 设置" style="width: 780px;">
+    <div class="token-settings">
+      <!-- 当前使用令牌 -->
+      <div class="token-toolbar">
+        <div class="flex items-center gap-3 flex-1">
+          <span class="text-sm text-[var(--text-secondary)] shrink-0">当前令牌</span>
+          <n-select
+            v-model:value="activeTokenId"
+            :options="tokenSelectOptions"
+            placeholder="选择令牌"
+            class="flex-1"
+          />
+        </div>
+        <n-button type="primary" secondary @click="handleAddToken">+ 添加令牌</n-button>
+      </div>
+
+      <n-empty v-if="!editingToken" description="请先添加 API 令牌" class="my-8" />
+
+      <template v-else>
+        <!-- 令牌基本信息 -->
+        <n-form label-placement="left" label-width="88" class="token-form">
+          <n-form-item label="令牌名称">
+            <n-input v-model:value="editingToken.name" placeholder="如：主账号、测试号" />
           </n-form-item>
-          <n-form-item label="Base URL" path="baseUrl">
+          <n-form-item label="API Key">
             <n-input
-              v-model:value="formData.baseUrl"
-              placeholder="https://api.xgapi.top"
-            />
-          </n-form-item>
-          <n-form-item label="API Key" path="apiKey">
-            <n-input
-              v-model:value="formData.apiKey"
+              v-model:value="editingToken.apiKey"
               type="password"
               show-password-on="click"
               placeholder="请输入 API Key"
             />
           </n-form-item>
-
-          <n-divider title-placement="left" class="!my-3">
-            <span class="text-xs text-[var(--text-secondary)]">端点路径</span>
-          </n-divider>
-          
-          <div class="endpoint-list">
-            <div class="endpoint-item">
-              <span class="endpoint-label">问答</span>
-              <n-tag size="small" type="info" class="endpoint-tag">{{ currentEndpoints.chat }}</n-tag>
-            </div>
-            <div class="endpoint-item">
-              <span class="endpoint-label">生图</span>
-              <n-tag size="small" type="success" class="endpoint-tag">{{ currentEndpoints.image }}</n-tag>
-            </div>
-            <div class="endpoint-item">
-              <span class="endpoint-label">视频生成</span>
-              <n-tag size="small" type="warning" class="endpoint-tag">{{ currentEndpoints.video }}</n-tag>
-            </div>
-            <div class="endpoint-item">
-              <span class="endpoint-label">视频查询</span>
-              <n-tag size="small" type="warning" class="endpoint-tag">{{ currentEndpoints.videoQuery }}</n-tag>
-            </div>
-          </div>
-
-          <n-alert v-if="!isConfigured" type="warning" title="未配置" class="mb-4">
-            <div class="flex flex-col gap-2">
-              <p>请配置 API Key 以使用 AI 功能</p>
-              <a 
-                href="https://api.chatfire.site/login?inviteCode=EEE80324" 
-                target="_blank"
-                class="text-[var(--accent-color)] hover:underline text-sm flex items-center gap-1"
-              >
-                🔗 点击获取 API Key
-                <span class="text-xs">（新用户注册）</span>
-              </a>
-            </div>
-          </n-alert>
-
-          <n-alert v-else type="success" title="已配置" class="mb-4">
-            API 已就绪，可以使用 AI 功能
-          </n-alert>
+          <n-form-item label="渠道">
+            <n-input value="星光 API" disabled />
+          </n-form-item>
+          <n-form-item label="线路">
+            <n-select
+              v-model:value="editingToken.baseUrl"
+              :options="baseUrlOptions"
+              placeholder="选择 API 线路"
+            />
+          </n-form-item>
         </n-form>
-      </n-tab-pane>
 
-      <!-- 模型配置标签 -->
-      <n-tab-pane name="models" tab="模型配置">
-        <div class="model-config-section">
-          <!-- 问答模型 -->
-          <div class="model-group">
-            <div class="model-group-header">
-              <span class="model-group-title">问答模型</span>
-              <n-tag size="tiny" type="info">{{ allChatModels.length }} 个</n-tag>
-            </div>
-            <div class="model-input-row">
-              <n-input
-                v-model:value="newChatModel"
-                placeholder="输入模型名称，如 gpt-4o"
-                size="small"
-                @keyup.enter="handleAddChatModel"
-              />
-              <n-button size="small" type="primary" @click="handleAddChatModel" :disabled="!newChatModel">
-                添加
-              </n-button>
-            </div>
-            <div class="model-tags">
-              <n-tag
-                v-for="model in allChatModels"
-                :key="model.key"
-                size="small"
-                :closable="model.isCustom"
-                :type="model.isCustom ? 'info' : 'default'"
-                @close="handleRemoveChatModel(model.key)"
-              >
-                {{ model.label }}
-              </n-tag>
-            </div>
-          </div>
+        <n-divider />
 
-          <!-- 图片模型 -->
-          <div class="model-group">
-            <div class="model-group-header">
-              <span class="model-group-title">图片模型</span>
-              <n-tag size="tiny" type="success">{{ allImageModels.length }} 个</n-tag>
-            </div>
-            <div class="model-input-row">
-              <n-input
-                v-model:value="newImageModel"
-                placeholder="输入模型名称，如 dall-e-3"
-                size="small"
-                @keyup.enter="handleAddImageModel"
-              />
-              <n-button size="small" type="primary" @click="handleAddImageModel" :disabled="!newImageModel">
-                添加
-              </n-button>
-            </div>
-            <div class="model-tags">
-              <n-tag
-                v-for="model in allImageModels"
-                :key="model.key"
-                size="small"
-                :closable="model.isCustom"
-                :type="model.isCustom ? 'success' : 'default'"
-                @close="handleRemoveImageModel(model.key)"
-              >
-                {{ model.label }}
-              </n-tag>
-            </div>
-          </div>
+        <!-- 可用模型配置 -->
+        <div class="model-section">
+          <div class="section-title">可用模型</div>
+          <p class="section-desc">从内置模型中添加，或自定义模型名。画布中仅显示当前令牌已启用的模型。</p>
 
-          <!-- 视频模型 -->
-          <div class="model-group">
-            <div class="model-group-header">
-              <span class="model-group-title">视频模型</span>
-              <n-tag size="tiny" type="warning">{{ allVideoModels.length }} 个</n-tag>
-            </div>
-            <div class="model-input-row">
-              <n-input
-                v-model:value="newVideoModel"
-                placeholder="输入模型名称，如 sora-2"
-                size="small"
-                @keyup.enter="handleAddVideoModel"
-              />
-              <n-button size="small" type="primary" @click="handleAddVideoModel" :disabled="!newVideoModel">
-                添加
-              </n-button>
-            </div>
-            <div class="model-tags">
-              <n-tag
-                v-for="model in allVideoModels"
-                :key="model.key"
-                size="small"
-                :closable="model.isCustom"
-                :type="model.isCustom ? 'warning' : 'default'"
-                @close="handleRemoveVideoModel(model.key)"
-              >
-                {{ model.label }}
-              </n-tag>
-            </div>
-          </div>
+          <ModelTokenPanel
+            title="问答模型"
+            tag-type="info"
+            :builtin-models="modelStore.builtinChatModels"
+            :enabled-keys="editingToken.models.chat"
+            :custom-input="newChatModel"
+            @update:custom-input="newChatModel = $event"
+            @toggle="(key) => toggleBuiltinModel('chat', key)"
+            @remove="(key) => removeModel('chat', key)"
+            @add-custom="() => addCustomModel('chat')"
+          />
+
+          <ModelTokenPanel
+            title="图片模型"
+            tag-type="success"
+            :builtin-models="modelStore.builtinImageModels"
+            :enabled-keys="editingToken.models.image"
+            :custom-input="newImageModel"
+            @update:custom-input="newImageModel = $event"
+            @toggle="(key) => toggleBuiltinModel('image', key)"
+            @remove="(key) => removeModel('image', key)"
+            @add-custom="() => addCustomModel('image')"
+          />
+
+          <ModelTokenPanel
+            title="视频模型"
+            tag-type="warning"
+            :builtin-models="modelStore.builtinVideoModels"
+            :enabled-keys="editingToken.models.video"
+            :custom-input="newVideoModel"
+            @update:custom-input="newVideoModel = $event"
+            @toggle="(key) => toggleBuiltinModel('video', key)"
+            @remove="(key) => removeModel('video', key)"
+            @add-custom="() => addCustomModel('video')"
+          />
         </div>
-      </n-tab-pane>
-    </n-tabs>
+
+        <n-alert v-if="!editingToken.apiKey" type="warning" title="未配置 API Key" class="mt-4">
+          请填写 API Key 后才能调用 AI 功能
+        </n-alert>
+        <n-alert v-else-if="totalEnabledModels === 0" type="warning" title="未配置可用模型" class="mt-4">
+          请至少为该令牌添加一个可用模型
+        </n-alert>
+        <n-alert v-else type="success" title="已就绪" class="mt-4">
+          当前令牌已配置 {{ totalEnabledModels }} 个可用模型
+        </n-alert>
+      </template>
+    </div>
 
     <template #footer>
-      <div class="flex justify-between items-center">
-        <a 
-          href="https://api.chatfire.site/login?inviteCode=EEE80324" 
-          target="_blank"
-          class="text-xs text-[var(--text-secondary)] hover:text-[var(--accent-color)] transition-colors"
+      <div class="flex justify-between items-center w-full">
+        <n-button
+          v-if="editingToken"
+          type="error"
+          tertiary
+          @click="handleDeleteToken"
         >
-          没有 API Key？点击注册
-        </a>
+          删除此令牌
+        </n-button>
+        <span v-else />
         <div class="flex gap-2">
-          <n-button @click="handleClear" tertiary>清除配置</n-button>
           <n-button @click="showModal = false">取消</n-button>
           <n-button type="primary" @click="handleSave">保存</n-button>
         </div>
@@ -189,222 +120,194 @@
 </template>
 
 <script setup>
-/**
- * API Settings Component | API 设置组件
- * Modal for configuring API key, base URL, and custom models
- */
-import { ref, reactive, watch, computed } from 'vue'
-import { NModal, NForm, NFormItem, NInput, NButton, NAlert, NDivider, NTag, NTabs, NTabPane, NSelect } from 'naive-ui'
+import { ref, computed, watch } from 'vue'
+import {
+  NModal, NForm, NFormItem, NInput, NButton, NAlert,
+  NDivider, NSelect, NEmpty, useDialog, useMessage
+} from 'naive-ui'
 import { useModelStore } from '../stores/pinia'
-import { getProviderConfig } from '../config/providers'
+import {
+  XGAPI_BASE_URL_OPTIONS,
+  DEFAULT_XGAPI_BASE_URL,
+  normalizeXgapiBaseUrl
+} from '../config/providers'
+import ModelTokenPanel from './ModelTokenPanel.vue'
 
-// Props | 属性
 const props = defineProps({
-  show: {
-    type: Boolean,
-    default: false
-  }
+  show: { type: Boolean, default: false }
 })
-
-// Emits | 事件
 const emit = defineEmits(['update:show', 'saved'])
 
-// API Config 状态
-const isConfigured = computed(() => !!modelStore.currentApiKey)
-
-// Model Store (Pinia) | 模型配置 Store
 const modelStore = useModelStore()
+const dialog = useDialog()
+const message = useMessage()
 
-// Provider options for select | 渠道下拉选项
-const providerOptions = modelStore.providerList.map(p => ({
-  label: p.label,
-  value: p.key
-}))
-
-// 当前渠道的端点路径
-const currentEndpoints = computed(() => {
-  const config = getProviderConfig(formData.provider)
-  return config.endpoints || {
-    chat: '/chat/completions',
-    image: '/v1/images/generations',
-    video: '/v1/videos',
-    videoQuery: '/v1/videos/{taskId}'
-  }
-})
-
-// 全局模型列表（不区分渠道）
-const allChatModels = computed(() => modelStore.allChatModels)
-const allImageModels = computed(() => modelStore.allImageModels)
-const allVideoModels = computed(() => modelStore.allVideoModels)
-
-// Modal visibility | 弹窗可见性
 const showModal = ref(props.show)
+const activeTokenId = ref(modelStore.currentTokenId)
+const editingToken = ref(null)
 
-// Form data | 表单数据
-const formData = reactive({
-  provider: modelStore.currentProvider,
-  apiKey: '',
-  baseUrl: ''
-})
-
-// New model inputs | 新模型输入
 const newChatModel = ref('')
 const newImageModel = ref('')
 const newVideoModel = ref('')
 
-// 初始化或切换渠道时，更新 API 配置
-const updateFormApiConfig = () => {
-  const provider = formData.provider
-  const config = getProviderConfig(provider)
-  formData.apiKey = modelStore.apiKeysByProvider[provider] || ''
-  formData.baseUrl = modelStore.baseUrlsByProvider[provider] || config.defaultBaseUrl || ''
+const baseUrlOptions = XGAPI_BASE_URL_OPTIONS
+
+const tokenSelectOptions = computed(() =>
+  modelStore.apiTokens.map((t) => ({
+    label: t.name || t.id,
+    value: t.id
+  }))
+)
+
+const totalEnabledModels = computed(() => {
+  if (!editingToken.value) return 0
+  const m = editingToken.value.models
+  return (m.chat?.length || 0) + (m.image?.length || 0) + (m.video?.length || 0)
+})
+
+const cloneToken = (token) => {
+  if (!token) return null
+  return JSON.parse(JSON.stringify(token))
 }
 
-// Watch prop changes | 监听属性变化
+const loadEditingToken = (id) => {
+  const token = modelStore.apiTokens.find((t) => t.id === id)
+  editingToken.value = cloneToken(token)
+  if (editingToken.value) {
+    editingToken.value.provider = 'chatfire'
+    editingToken.value.baseUrl = normalizeXgapiBaseUrl(editingToken.value.baseUrl)
+    editingToken.value.models ||= { chat: [], image: [], video: [] }
+    editingToken.value.customModels ||= { chat: [], image: [], video: [] }
+  }
+}
+
 watch(() => props.show, (val) => {
   showModal.value = val
   if (val) {
-    formData.provider = modelStore.currentProvider
-    updateFormApiConfig()
+    activeTokenId.value = modelStore.currentTokenId || modelStore.apiTokens[0]?.id || ''
+    loadEditingToken(activeTokenId.value)
   }
 })
 
-// 监听渠道变化，更新表单中的 API 配置
-watch(() => formData.provider, () => {
-  updateFormApiConfig()
+watch(showModal, (val) => emit('update:show', val))
+
+watch(activeTokenId, (id) => {
+  if (id) loadEditingToken(id)
 })
 
-// Watch modal changes | 监听弹窗变化
-watch(showModal, (val) => {
-  emit('update:show', val)
-})
+const handleAddToken = () => {
+  const token = modelStore.addToken({
+    name: `令牌 ${modelStore.apiTokens.length + 1}`,
+    provider: 'chatfire',
+    baseUrl: DEFAULT_XGAPI_BASE_URL,
+  })
+  activeTokenId.value = token.id
+  loadEditingToken(token.id)
+}
 
-// Handle add models | 处理添加模型
-const handleAddChatModel = () => {
-  if (newChatModel.value.trim()) {
-    modelStore.addCustomChatModel(newChatModel.value.trim())
-    newChatModel.value = ''
+const handleDeleteToken = () => {
+  if (!editingToken.value) return
+  dialog.warning({
+    title: '删除令牌',
+    content: `确定删除「${editingToken.value.name}」吗？`,
+    positiveText: '删除',
+    negativeText: '取消',
+    onPositiveClick: () => {
+      modelStore.removeToken(editingToken.value.id)
+      activeTokenId.value = modelStore.currentTokenId
+      loadEditingToken(activeTokenId.value)
+      message.success('令牌已删除')
+    }
+  })
+}
+
+const toggleBuiltinModel = (type, key) => {
+  if (!editingToken.value) return
+  const list = editingToken.value.models[type]
+  const idx = list.indexOf(key)
+  if (idx > -1) {
+    list.splice(idx, 1)
+    editingToken.value.customModels[type] = editingToken.value.customModels[type].filter((m) => m.key !== key)
+  } else {
+    list.push(key)
   }
 }
 
-const handleAddImageModel = () => {
-  if (newImageModel.value.trim()) {
-    modelStore.addCustomImageModel(newImageModel.value.trim())
-    newImageModel.value = ''
+const removeModel = (type, key) => {
+  if (!editingToken.value) return
+  editingToken.value.models[type] = editingToken.value.models[type].filter((k) => k !== key)
+  editingToken.value.customModels[type] = editingToken.value.customModels[type].filter((m) => m.key !== key)
+}
+
+const addCustomModel = (type) => {
+  const inputMap = { chat: newChatModel, image: newImageModel, video: newVideoModel }
+  const val = inputMap[type].value.trim()
+  if (!val || !editingToken.value) return
+  if (editingToken.value.models[type].includes(val)) {
+    message.warning('该模型已添加')
+    return
   }
+  editingToken.value.models[type].push(val)
+  editingToken.value.customModels[type].push({ key: val, label: val })
+  inputMap[type].value = ''
 }
 
-const handleAddVideoModel = () => {
-  if (newVideoModel.value.trim()) {
-    modelStore.addCustomVideoModel(newVideoModel.value.trim())
-    newVideoModel.value = ''
-  }
-}
-
-// Handle remove models | 处理删除模型
-const handleRemoveChatModel = (modelKey) => {
-  modelStore.removeCustomChatModel(modelKey)
-}
-
-const handleRemoveImageModel = (modelKey) => {
-  modelStore.removeCustomImageModel(modelKey)
-}
-
-const handleRemoveVideoModel = (modelKey) => {
-  modelStore.removeCustomVideoModel(modelKey)
-}
-
-// Handle save | 处理保存
 const handleSave = () => {
-  if (formData.provider) {
-    modelStore.setProvider(formData.provider)
+  if (!editingToken.value) {
+    showModal.value = false
+    return
   }
-  if (formData.apiKey) {
-    modelStore.setApiKeyByProvider(formData.provider, formData.apiKey)
-  }
-  if (formData.baseUrl) {
-    modelStore.setBaseUrlByProvider(formData.provider, formData.baseUrl)
-  }
+
+  modelStore.updateToken(editingToken.value.id, {
+    name: editingToken.value.name,
+    apiKey: editingToken.value.apiKey,
+    provider: 'chatfire',
+    baseUrl: normalizeXgapiBaseUrl(editingToken.value.baseUrl),
+    models: editingToken.value.models,
+    customModels: editingToken.value.customModels
+  })
+
+  modelStore.setCurrentTokenId(editingToken.value.id)
+  modelStore.setProvider('chatfire')
+
   showModal.value = false
   emit('saved')
-}
-
-// Handle clear | 处理清除
-const handleClear = () => {
-  modelStore.clearApiConfigByProvider(formData.provider)
-  modelStore.clearCustomModels()
-  formData.apiKey = ''
-  formData.baseUrl = ''
+  message.success('API 配置已保存')
 }
 </script>
 
 <style scoped>
-.endpoint-list {
+.token-settings {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.token-toolbar {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  align-items: center;
+  gap: 12px;
   margin-bottom: 16px;
-  padding: 12px;
-  background: var(--bg-secondary, #f5f5f5);
-  border-radius: 6px;
 }
 
-.endpoint-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.endpoint-label {
-  font-size: 13px;
-  color: var(--text-secondary, #666);
-  min-width: 70px;
-}
-
-.endpoint-tag {
-  font-family: monospace;
-  font-size: 12px;
-}
-
-.model-config-section {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.model-group {
-  padding: 12px;
-  background: var(--bg-secondary, #f5f5f5);
-  border-radius: 8px;
-}
-
-.model-group-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.model-group-title {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-primary, #333);
-}
-
-.model-input-row {
-  display: flex;
-  gap: 8px;
+.token-form {
   margin-bottom: 8px;
 }
 
-.model-input-row .n-input {
-  flex: 1;
+.model-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
-.model-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
+.section-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.section-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: -8px 0 4px;
 }
 </style>

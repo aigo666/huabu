@@ -12,8 +12,10 @@ export const PROVIDERS = {
     endpoints: {
       chat: '/v1/chat/completions',
       image: '/v1/images/generations',
-      video: '/v1/video/generations',
-      videoQuery: '/v1/video/task/{taskId}'
+      video: '/v1/videos',
+      videoQuery: '/v1/videos/{taskId}',
+      videoGenerations: '/v1/video/generations',
+      videoGenerationsQuery: '/v1/video/task/{taskId}'
     },
     // 火宝渠道请求适配
     requestAdapter: {
@@ -36,11 +38,20 @@ export const PROVIDERS = {
         if (params.n) adapted.n = params.n
         if (params.quality) adapted.quality = params.quality
         if (params.style) adapted.style = params.style
+        if (params.response_format) adapted.response_format = params.response_format
+        if (params.output_format) adapted.output_format = params.output_format
+        if (params.background) adapted.background = params.background
+        if (params.moderation) adapted.moderation = params.moderation
         if (params.image) adapted.image = params.image
         return adapted
       },
       video: (params) => {
         const model = params.model || ''
+
+        // Veo 3.1 - multipart 字段已在 useApi 中构建，此处透传
+        if (model.includes('veo-3.1')) {
+          return params
+        }
 
         // Seedance 模型 - 使用 content 数组格式
         if (model.includes('seedance')) {
@@ -132,15 +143,18 @@ export const PROVIDERS = {
           return adapted
         }
 
-        // 默认格式（veo 等）
+        // 默认格式（veo / sora 等 OpenAI 风格）
         const adapted = {
           model: params.model,
           prompt: params.prompt || ''
         }
-        if (params.first_frame_image) adapted.first_frame_image = params.first_frame_image
-        if (params.last_frame_image) adapted.last_frame_image = params.last_frame_image
+        if (params.first_frame_image) adapted.input_reference = params.first_frame_image
+        if (params.last_frame_image) adapted.last_frame = params.last_frame_image
+        if (params.reference_images?.length) adapted.reference_image = params.reference_images
+        if (params.aspectRatio) adapted.aspectRatio = params.aspectRatio
+        if (params.resolution) adapted.resolution = params.resolution
+        if (params.seconds != null) adapted.seconds = String(params.seconds)
         if (params.size) adapted.size = params.size
-        if (params.seconds) adapted.seconds = params.seconds
 
         return adapted
       }
@@ -200,6 +214,10 @@ export const PROVIDERS = {
         if (params.n) adapted.n = params.n
         if (params.quality) adapted.quality = params.quality
         if (params.style) adapted.style = params.style
+        if (params.response_format) adapted.response_format = params.response_format
+        if (params.output_format) adapted.output_format = params.output_format
+        if (params.background) adapted.background = params.background
+        if (params.moderation) adapted.moderation = params.moderation
         if (params.image) adapted.image = params.image
         return adapted
       },
@@ -245,14 +263,24 @@ export const PROVIDERS = {
   default: 'chatfire'
 }
 
-// 获取渠道列表
+/** 星光 API 可选线路 */
+export const XGAPI_BASE_URL_OPTIONS = [
+  { label: '主线路：https://api.xgapi.top', value: 'https://api.xgapi.top' },
+  { label: 'CDN线路：https://cdn.xgapi.top', value: 'https://cdn.xgapi.top' },
+  { label: '香港线路：https://hk-api.xgapi.top', value: 'https://hk-api.xgapi.top' },
+]
+
+export const DEFAULT_XGAPI_BASE_URL = 'https://api.xgapi.top'
+
+export const normalizeXgapiBaseUrl = (baseUrl) => {
+  const url = (baseUrl || '').replace(/\/$/, '')
+  const matched = XGAPI_BASE_URL_OPTIONS.find((o) => o.value === url)
+  return matched?.value || DEFAULT_XGAPI_BASE_URL
+}
+
+// 获取渠道列表（仅星光 API）
 export const getProviderList = () => {
-  return Object.entries(PROVIDERS)
-    .filter(([key]) => key !== 'default')
-    .map(([key, value]) => ({
-      key,
-      label: value.label
-    }))
+  return [{ key: 'chatfire', label: PROVIDERS.chatfire.label }]
 }
 
 // 获取默认渠道

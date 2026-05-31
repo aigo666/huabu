@@ -56,6 +56,7 @@
         @node-click="onNodeClick"
         @pane-click="onPaneClick"
         @viewport-change="handleViewportChange"
+        @nodes-change="onNodesChange"
         @edges-change="onEdgesChange"
         class="canvas-flow"
       >
@@ -167,18 +168,24 @@
             @keydown.enter.exact="handleEnterKey"
             @keydown.enter.ctrl="sendMessage"
           />
-          <div class="flex items-center justify-between mt-2">
-            <div class="flex items-center gap-2">
+          <div class="flex items-center justify-between gap-3 mt-2">
+            <div class="flex items-center gap-2 min-w-0">
               <button 
                 @click="handlePolish"
                 :disabled="isProcessing || !chatInput.trim()"
-                class="px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] border border-[var(--border-color)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                class="px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] border border-[var(--border-color)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
                 title="AI 润色提示词"
               >
                 ✨ AI 润色
               </button>
+              <NodeModelSelect
+                v-model="chatModel"
+                type="chat"
+                :show-label="false"
+                class="canvas-chat-model-select"
+              />
             </div>
-            <div class="flex items-center gap-3">
+            <div class="flex items-center gap-3 shrink-0">
               <label class="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
                 <n-switch v-model:value="autoExecute" size="small" />
                 自动执行
@@ -249,7 +256,7 @@
  */
 import { ref, computed, onMounted, onUnmounted, watch, nextTick, markRaw } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { VueFlow, useVueFlow } from '@vue-flow/core'
+import { VueFlow, useVueFlow, applyNodeChanges } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { MiniMap } from '@vue-flow/minimap'
 import { NIcon, NSwitch, NDropdown, NMessageProvider, NSpin, NModal, NInput, NButton } from 'naive-ui'
@@ -285,15 +292,14 @@ import ApiSettings from '../components/ApiSettings.vue'
 import DownloadModal from '../components/DownloadModal.vue'
 import WorkflowPanel from '../components/WorkflowPanel.vue'
 import AppHeader from '../components/AppHeader.vue'
+import NodeModelSelect from '../components/nodes/NodeModelSelect.vue'
+import { DEFAULT_CHAT_MODEL } from '@/config/models'
+
+const CHAT_PANEL_MODEL_KEY = 'canvas-chat-model'
 
 // API Config state | API 配置状态
 const modelStore = useModelStore()
 const isApiConfigured = computed(() => !!modelStore.currentApiKey)
-
-// Initialize models on page load | 页面加载时初始化模型
-onMounted(() => {
-  loadAllModels()
-})
 
 // Chat templates | 问答模板
 const CHAT_TEMPLATES = {
@@ -347,6 +353,7 @@ import LLMConfigNode from '../components/nodes/LLMConfigNode.vue'
 import ImageRoleEdge from '../components/edges/ImageRoleEdge.vue'
 import PromptOrderEdge from '../components/edges/PromptOrderEdge.vue'
 import ImageOrderEdge from '../components/edges/ImageOrderEdge.vue'
+import { isSoraVideoModel } from '../utils/soraVideo'
 
 const router = useRouter()
 const route = useRoute()
@@ -374,6 +381,7 @@ const edgeTypes = {
 // UI state | UI状态
 const showNodeMenu = ref(false)
 const chatInput = ref('')
+const chatModel = ref(localStorage.getItem(CHAT_PANEL_MODEL_KEY) || DEFAULT_CHAT_MODEL)
 const autoExecute = ref(false)
 const isMobile = ref(false)
 const showGrid = ref(true)
@@ -432,6 +440,14 @@ const nodeTypeOptions = [
 ]
 
 // Input placeholder | 输入占位符
+watch(chatModel, (val) => {
+  if (val) localStorage.setItem(CHAT_PANEL_MODEL_KEY, val)
+})
+
+const getChatRequestOptions = () => ({
+  model: chatModel.value
+})
+
 const inputPlaceholder = '你可以试着说"帮我生成一个二次元的卡通角色"'
 
 // Quick suggestions | 快捷建议
@@ -524,11 +540,11 @@ const onConnect = (params) => {
   const targetNode = nodes.value.find(n => n.id === params.target)
   
   if (sourceNode?.type === 'image' && targetNode?.type === 'videoConfig') {
-    // Use imageRole edge type | 使用图片角色边类型
+    const defaultRole = isSoraVideoModel(targetNode.data?.model) ? 'input_reference' : 'first_frame_image'
     addEdge({
       ...params,
       type: 'imageRole',
-      data: { imageRole: 'first_frame_image' } // Default to first frame | 默认首帧
+      data: { imageRole: defaultRole }
     })
   } else if (sourceNode?.type === 'text' && targetNode?.type === 'imageConfig') {
     // Use promptOrder edge type | 使用提示词顺序边类型
@@ -617,6 +633,24 @@ const handleViewportChange = (newViewport) => {
   updateViewport(newViewport)
 }
 
+// Handle nodes change | 处理节点变化（与 Vue Flow 同步）
+const onNodesChange = (changes) => {
+  const removedIds = changes
+    .filter((change) => change.type === 'remove')
+    .map((change) => change.id)
+
+  nodes.value = applyNodeChanges(changes, nodes.value)
+
+  if (removedIds.length) {
+    edges.value = edges.value.filter(
+      (edge) => !removedIds.includes(edge.source) && !removedIds.includes(edge.target)
+    )
+    nextTick(() => {
+      manualSaveHistory()
+    })
+  }
+}
+
 // Handle edges change | 处理边变化
 const onEdgesChange = (changes) => {
   // Check if any edge is being removed | 检查是否有边被删除
@@ -699,7 +733,7 @@ const handlePolish = async () => {
 
   try {
     // Call chat API to polish the prompt | 调用 AI 润色提示词
-    const result = await sendChat(input, true)
+    const result = await sendChat(input, true, getChatRequestOptions())
     
     if (result) {
       chatInput.value = result
@@ -834,6 +868,12 @@ watch(
 onMounted(() => {
   checkMobile()
   window.addEventListener('resize', checkMobile)
+  loadAllModels()
+
+  const models = modelStore.getNodeTokenModels('chat', '')
+  if (models.length && !models.some((m) => m.key === chatModel.value)) {
+    chatModel.value = models[0].key
+  }
   
   // Initialize projects store | 初始化项目存储
   initProjectsStore()
@@ -870,5 +910,16 @@ onUnmounted(() => {
 .canvas-flow {
   width: 100%;
   height: 100%;
+}
+
+.canvas-chat-model-select :deep(.n-base-selection) {
+  --n-height: 30px;
+  font-size: 12px;
+  border-radius: 8px;
+  background: var(--bg-secondary);
+}
+
+.canvas-chat-model-select :deep(.n-base-selection-label) {
+  white-space: nowrap;
 }
 </style>

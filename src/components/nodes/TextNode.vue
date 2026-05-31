@@ -22,13 +22,13 @@
           @keydown.escape="cancelEditLabel"
           class="text-sm font-medium bg-[var(--bg-tertiary)] text-[var(--text-secondary)] px-1 rounded outline-none border border-blue-500"
         />
-        <div class="flex items-center gap-1">
-          <button @click="handleDuplicate" class="p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors" title="复制节点">
+        <div class="flex items-center gap-1 nodrag nopan">
+          <button @click.stop="handleDuplicate" class="nodrag nopan p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors" title="复制节点">
             <n-icon :size="14">
               <CopyOutline />
             </n-icon>
           </button>
-          <button @click="handleDelete" class="p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors" title="删除节点">
+          <button @click.stop="handleDelete" class="nodrag nopan p-1 hover:bg-[var(--bg-tertiary)] rounded transition-colors" title="删除节点">
             <n-icon :size="14">
               <TrashOutline />
             </n-icon>
@@ -42,7 +42,7 @@
       </div>
 
       <!-- Content | 内容 -->
-      <div class="p-3">
+      <div class="p-3 nodrag nopan">
         <div class="textarea-wrapper" ref="textareaWrapper">
           <!-- 可编辑的文本区域（支持 @ 引用图片显示）参考 MaterialInput -->
           <div
@@ -58,11 +58,25 @@
             :data-placeholder="placeholder"
           ></div>
         </div>
+        <!-- Token selector | 令牌选择 -->
+        <NodeTokenSelect
+          v-model="localTokenId"
+          class="mt-2"
+          @update:model-value="handleTokenSelect"
+        />
+        <!-- Model selector | 模型选择（内置 + 自定义，随令牌过滤） -->
+        <NodeModelSelect
+          v-model="localModel"
+          type="chat"
+          :token-id="localTokenId"
+          class="mt-2"
+          @update:model-value="handleModelSelect"
+        />
         <!-- Polish button | 润色按钮 -->
         <button
-          @click="handlePolish"
+          @click.stop="handlePolish"
           :disabled="isPolishing || !plainText.trim()"
-          class="mt-2 px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-tertiary)] hover:bg-[var(--accent-color)] hover:text-white border border-[var(--border-color)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+          class="nodrag nopan mt-2 px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-tertiary)] hover:bg-[var(--accent-color)] hover:text-white border border-[var(--border-color)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
         >
           <n-spin v-if="isPolishing" :size="12" />
           <span v-else>✨</span>
@@ -98,8 +112,11 @@ import { TrashOutline, ExpandOutline, CopyOutline, ImageOutline, VideocamOutline
 import { updateNode, removeNode, duplicateNode, addNode, addEdge, nodes } from '../../stores/canvas'
 import NodeHandleMenu from './NodeHandleMenu.vue'
 import MentionsPicker from '../MentionsPicker.vue'
+import NodeTokenSelect from './NodeTokenSelect.vue'
+import NodeModelSelect from './NodeModelSelect.vue'
 import { useChat } from '../../hooks'
 import { useModelStore } from '../../stores/pinia'
+import { DEFAULT_CHAT_MODEL } from '@/config/models'
 import { parseMentions } from '../../hooks/useNodeRef'
 
 const props = defineProps({
@@ -117,11 +134,13 @@ const isApiConfigured = computed(() => !!modelStore.currentApiKey)
 // Chat hook for polish | 润色用的 Chat hook
 const { send: sendChat } = useChat({
   systemPrompt: '你是一个专业的AI绘画提示词专家。将用户输入的内容美化成高质量的生图提示词，包含风格、光线、構图、细节等要素。直接返回提示词，不要其他解释。',
-  model: 'gpt-4o-mini'
+  model: DEFAULT_CHAT_MODEL
 })
 
 // Local content state | 本地内容状态
 const showHandleMenu = ref(false)
+const localTokenId = ref(props.data?.tokenId || '')
+const localModel = ref(props.data?.model || DEFAULT_CHAT_MODEL)
 const content = ref(props.data?.content || '')
 const placeholder = '请输入文本内容，输入 @ 可引用图片节点...'
 
@@ -600,6 +619,8 @@ watch(content, (newVal) => {
 
 // Initialize editor content | 初始化 editor 内容
 onMounted(() => {
+  syncModelToToken()
+
   if (editorRef.value) {
     if (props.data?.content) {
       content.value = props.data.content
@@ -614,6 +635,25 @@ onMounted(() => {
 // Update content in store | 更新存储中的内容
 const updateContent = () => {
   updateNode(props.id, { content: content.value })
+}
+
+const handleTokenSelect = (tokenId) => {
+  localTokenId.value = tokenId
+  updateNode(props.id, { tokenId: tokenId || null })
+  syncModelToToken()
+}
+
+const handleModelSelect = (modelKey) => {
+  localModel.value = modelKey
+  updateNode(props.id, { model: modelKey })
+}
+
+const syncModelToToken = () => {
+  const models = modelStore.getNodeTokenModels('chat', localTokenId.value)
+  if (!models.length) return
+  if (!models.some((m) => m.key === localModel.value)) {
+    handleModelSelect(models[0].key)
+  }
 }
 
 // Handle AI polish | 处理 AI 润色
@@ -632,7 +672,10 @@ const handlePolish = async () => {
 
   try {
     // Call chat API to polish the prompt | 调用 AI 润色提示词
-    const result = await sendChat(input, true)
+    const result = await sendChat(input, true, {
+      tokenId: localTokenId.value || undefined,
+      model: localModel.value
+    })
     
     if (result) {
       content.value = result

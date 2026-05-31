@@ -12,6 +12,8 @@ import {
   SEEDREAM_4K_SIZE_OPTIONS,
   SEEDREAM_QUALITY_OPTIONS,
   SEEDANCE_RESOLUTION_OPTIONS,
+  SEEDANCE_2_RESOLUTION_OPTIONS,
+  VEO_VIDEO_RESOLUTION_OPTIONS,
   VIDEO_RATIO_LIST,
   VIDEO_RATIO_OPTIONS,
   VIDEO_DURATION_OPTIONS,
@@ -68,6 +70,10 @@ export const getModelConfig = (modelKey) => {
  */
 export const getModelSizeOptions = (modelKey, quality = 'standard') => {
   const model = IMAGE_MODELS.find(m => m.key === modelKey)
+
+  if (model?.sizeOptions) {
+    return model.sizeOptions
+  }
   
   // If model has getSizesByQuality function, use it | 如果模型有 getSizesByQuality 函数，使用它
   if (model?.getSizesByQuality) {
@@ -98,6 +104,7 @@ export const getModelQualityOptions = (modelKey) => {
  */
 export const getModelRatioOptions = (modelKey) => {
   const model = VIDEO_MODELS.find(m => m.key === modelKey)
+  if (model?.sizeOptions?.length) return []
   if (!model?.ratios) return VIDEO_RATIO_OPTIONS
   
   // Convert ratios array to dropdown options | 转换 ratios 数组为下拉选项
@@ -108,15 +115,25 @@ export const getModelRatioOptions = (modelKey) => {
 }
 
 /**
- * Get duration options for video model | 获取视频模型时长选项
- * Returns options based on model's durs array
+ * Get size options for video model | 获取视频模型尺寸选项（如 Sora 1280x720）
  */
-export const getModelDurationOptions = (modelKey) => {
+export const getModelVideoSizeOptions = (modelKey) => {
   const model = VIDEO_MODELS.find(m => m.key === modelKey)
-  if (!model?.durs) return VIDEO_DURATION_OPTIONS
+  return model?.sizeOptions || []
+}
 
-  // durs is already in { label, key } format | durs 已经是 { label, key } 格式
-  return model.durs
+/**
+ * Get duration options for video model | 获取视频模型时长选项
+ * Returns options based on model's durs array or resolution constraint
+ */
+export const getModelDurationOptions = (modelKey, resolution = '') => {
+  const model = VIDEO_MODELS.find(m => m.key === modelKey)
+  if (model?.getDurationsByResolution) {
+    const res = resolution || model.defaultParams?.resolution || ''
+    return model.getDurationsByResolution(res)
+  }
+  if (model?.durs) return model.durs
+  return VIDEO_DURATION_OPTIONS
 }
 
 /**
@@ -125,10 +142,13 @@ export const getModelDurationOptions = (modelKey) => {
  */
 export const getModelResolutionOptions = (modelKey) => {
   const model = VIDEO_MODELS.find(m => m.key === modelKey)
-  if (!model?.resolutions) return SEEDANCE_RESOLUTION_OPTIONS
+  if (model?.resolutionOptions) return model.resolutionOptions
+  if (!model?.resolutions) return []
 
   return model.resolutions.map(res => {
-    const option = SEEDANCE_RESOLUTION_OPTIONS.find(o => o.key === res)
+    const option = VEO_VIDEO_RESOLUTION_OPTIONS.find(o => o.key === res)
+      || SEEDANCE_2_RESOLUTION_OPTIONS.find(o => o.key === res)
+      || SEEDANCE_RESOLUTION_OPTIONS.find(o => o.key === res)
     return option || { label: res, key: res }
   })
 }
@@ -207,7 +227,7 @@ export {
 }
 
 // Export options | 导出选项
-export { SEEDREAM_SIZE_OPTIONS, SEEDREAM_4K_SIZE_OPTIONS, SEEDREAM_QUALITY_OPTIONS, SEEDANCE_RESOLUTION_OPTIONS, VIDEO_RATIO_OPTIONS, VIDEO_DURATION_OPTIONS }
+export { SEEDREAM_SIZE_OPTIONS, SEEDREAM_4K_SIZE_OPTIONS, SEEDREAM_QUALITY_OPTIONS, SEEDANCE_RESOLUTION_OPTIONS, VEO_VIDEO_RESOLUTION_OPTIONS, VIDEO_RATIO_OPTIONS, VIDEO_DURATION_OPTIONS }
 
 // Export state | 导出状态
 export { loading, error }

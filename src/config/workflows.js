@@ -1181,7 +1181,7 @@ export const WORKFLOW_TEMPLATES = [
 3. 插画描述要详细，包含角色外貌特征、动作、场景、色调
 4. 每页插画描述末尾加上画风说明以保持一致
 5. 故事节奏：开场→发展→高潮→温馨结局`,
-          model: 'gpt-4o',
+          model: 'gpt-4o-mini',
           outputFormat: 'text'
         }
       })

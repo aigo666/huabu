@@ -14,6 +14,7 @@ import {
   DEFAULT_VIDEO_MODEL
 } from '@/config/models'
 import { PROVIDERS, getProviderList, getDefaultProvider, getProviderConfig, getDefaultBaseUrl } from '@/config/providers'
+import { createTokenId, createEmptyToken, STORAGE_KEYS as TOKEN_STORAGE_KEYS } from '@/utils/apiTokens'
 
 // 存储键名
 const STORAGE_KEYS = {
@@ -28,7 +29,9 @@ const STORAGE_KEYS = {
   CUSTOM_IMAGE_MODELS_BY_PROVIDER: 'custom-image-models-by-provider',
   CUSTOM_VIDEO_MODELS_BY_PROVIDER: 'custom-video-models-by-provider',
   API_KEYS_BY_PROVIDER: 'api-keys-by-provider',
-  BASE_URLS_BY_PROVIDER: 'base-urls-by-provider'
+  BASE_URLS_BY_PROVIDER: 'base-urls-by-provider',
+  API_TOKENS: TOKEN_STORAGE_KEYS.API_TOKENS,
+  CURRENT_TOKEN_ID: TOKEN_STORAGE_KEYS.CURRENT_TOKEN_ID
 }
 
 /**
@@ -78,6 +81,123 @@ const setStoredJson = (key, value) => {
   } catch {
     // ignore
   }
+}
+
+const removeStored = (key) => {
+  try {
+    localStorage.removeItem(key)
+  } catch {
+    // ignore
+  }
+}
+
+const migrateLegacyToTokens = () => {
+  const existing = getStoredJson(STORAGE_KEYS.API_TOKENS, [])
+  if (existing.length) return existing
+
+  const legacyKeys = getStoredJson(STORAGE_KEYS.API_KEYS_BY_PROVIDER, {})
+  const legacyBaseUrls = getStoredJson(STORAGE_KEYS.BASE_URLS_BY_PROVIDER, {})
+  const legacyCustomChat = getStoredJson(STORAGE_KEYS.CUSTOM_CHAT_MODELS, [])
+  const legacyCustomImage = getStoredJson(STORAGE_KEYS.CUSTOM_IMAGE_MODELS, [])
+  const legacyCustomVideo = getStoredJson(STORAGE_KEYS.CUSTOM_VIDEO_MODELS, [])
+
+  const allKeys = {
+    chat: CHAT_MODELS.map((m) => m.key),
+    image: IMAGE_MODELS.map((m) => m.key),
+    video: VIDEO_MODELS.map((m) => m.key)
+  }
+
+  const tokens = []
+  for (const [provider, apiKey] of Object.entries(legacyKeys)) {
+    if (!apiKey) continue
+    tokens.push({
+      id: createTokenId(),
+      name: provider === 'chatfire' ? '默认令牌' : provider,
+      apiKey,
+      provider,
+      baseUrl: legacyBaseUrls[provider] || '',
+      models: { chat: [...allKeys.chat], image: [...allKeys.image], video: [...allKeys.video] },
+      customModels: {
+        chat: [...legacyCustomChat],
+        image: [...legacyCustomImage],
+        video: [...legacyCustomVideo]
+      }
+    })
+  }
+  return tokens
+}
+
+const IMAGE_CUSTOM_DEFAULTS = {
+  sizes: [],
+  defaultParams: { quality: 'standard', style: 'vivid' }
+}
+
+const VIDEO_CUSTOM_DEFAULTS = {
+  ratios: ['16x9', '9:16', '1:1'],
+  durs: [{ label: '5 秒', key: 5 }, { label: '10 秒', key: 10 }],
+  defaultParams: { ratio: '16:9', duration: 5 }
+}
+
+const BUILTIN_MODELS_BY_TYPE = {
+  chat: CHAT_MODELS,
+  image: IMAGE_MODELS,
+  video: VIDEO_MODELS
+}
+
+const CUSTOM_DEFAULTS_BY_TYPE = {
+  chat: {},
+  image: IMAGE_CUSTOM_DEFAULTS,
+  video: VIDEO_CUSTOM_DEFAULTS
+}
+
+const resolveTokenModels = (token, type, builtinModels, customDefaults = {}) => {
+  if (!token) {
+    return builtinModels.map((m) => ({ ...m, isCustom: false }))
+  }
+
+  const keys = token.models?.[type] || []
+  if (!keys.length) return []
+
+  return keys
+    .map((key) => {
+      const builtin = builtinModels.find((m) => m.key === key)
+      if (builtin) return { ...builtin, isCustom: false }
+
+      const custom = token.customModels?.[type]?.find((m) => m.key === key)
+      if (custom) {
+        return {
+          label: custom.label || custom.key,
+          key: custom.key,
+          isCustom: true,
+          provider: [token.provider],
+          ...customDefaults
+        }
+      }
+
+      // 已下架的内置模型 key 残留，不当作自定义展示
+      return null
+    })
+    .filter(Boolean)
+}
+
+/** 清理令牌中已失效的模型 key（内置已移除且非用户自定义） */
+const sanitizeTokenModels = (token) => {
+  const types = ['chat', 'image', 'video']
+  for (const type of types) {
+    const builtin = BUILTIN_MODELS_BY_TYPE[type] || []
+    if (!token.models?.[type]) token.models = { ...token.models, [type]: [] }
+    if (!token.customModels?.[type]) token.customModels = { ...token.customModels, [type]: [] }
+
+    token.models[type] = token.models[type].filter(
+      (key) =>
+        builtin.some((m) => m.key === key) ||
+        token.customModels[type].some((m) => m.key === key)
+    )
+    token.customModels[type] = token.customModels[type].filter((m) =>
+      token.models[type].includes(m.key)
+    )
+  }
+  return token
 }
 
 /**
@@ -149,94 +269,201 @@ export const useModelStore = defineStore('model', () => {
   const customImageModelsByProvider = ref(getStoredJson(STORAGE_KEYS.CUSTOM_IMAGE_MODELS_BY_PROVIDER, {}))
   const customVideoModelsByProvider = ref(getStoredJson(STORAGE_KEYS.CUSTOM_VIDEO_MODELS_BY_PROVIDER, {}))
 
+  // ============ API Tokens 状态 ============
+
+  const apiTokens = ref(
+    migrateLegacyToTokens().map((token) => sanitizeTokenModels({ ...token }))
+  )
+  setStoredJson(STORAGE_KEYS.API_TOKENS, apiTokens.value)
+  const currentTokenId = ref(getStored(STORAGE_KEYS.CURRENT_TOKEN_ID, ''))
+
+  if (!currentTokenId.value && apiTokens.value.length) {
+    currentTokenId.value = apiTokens.value[0].id
+    setStored(STORAGE_KEYS.CURRENT_TOKEN_ID, currentTokenId.value)
+  }
+
+  const currentToken = computed(() =>
+    apiTokens.value.find((t) => t.id === currentTokenId.value) || apiTokens.value[0] || null
+  )
+
+  const currentApiKey = computed(() => currentToken.value?.apiKey || '')
+  const currentBaseUrl = computed(() => {
+    const token = currentToken.value
+    if (token?.baseUrl) return token.baseUrl
+    const provider = token?.provider || currentProvider.value
+    return getDefaultBaseUrl(provider)
+  })
+
+  const isApiConfigured = computed(() => !!currentApiKey.value)
+
+  const setCurrentTokenId = (id) => {
+    currentTokenId.value = id
+    setStored(STORAGE_KEYS.CURRENT_TOKEN_ID, id)
+    const token = apiTokens.value.find((t) => t.id === id)
+    if (token?.provider) {
+      currentProvider.value = token.provider
+      setStored(STORAGE_KEYS.PROVIDER, token.provider)
+    }
+  }
+
+  const addToken = (payload = {}) => {
+    const token = createEmptyToken(payload)
+    apiTokens.value.push(token)
+    if (apiTokens.value.length === 1) {
+      setCurrentTokenId(token.id)
+    }
+    return token
+  }
+
+  const updateToken = (id, patch) => {
+    const idx = apiTokens.value.findIndex((t) => t.id === id)
+    if (idx === -1) return false
+    apiTokens.value[idx] = { ...apiTokens.value[idx], ...patch }
+    if (id === currentTokenId.value && patch.provider) {
+      currentProvider.value = patch.provider
+      setStored(STORAGE_KEYS.PROVIDER, patch.provider)
+    }
+    return true
+  }
+
+  const removeToken = (id) => {
+    const idx = apiTokens.value.findIndex((t) => t.id === id)
+    if (idx === -1) return false
+    apiTokens.value.splice(idx, 1)
+    if (currentTokenId.value === id) {
+      const next = apiTokens.value[0]
+      if (next) setCurrentTokenId(next.id)
+      else {
+        currentTokenId.value = ''
+        removeStored(STORAGE_KEYS.CURRENT_TOKEN_ID)
+      }
+    }
+    return true
+  }
+
+  const ensureTokenModelList = (token, type) => {
+    if (!token.models[type]) token.models[type] = []
+    if (!token.customModels[type]) token.customModels[type] = []
+  }
+
+  const isTokenModelEnabled = (tokenId, type, modelKey) => {
+    const token = apiTokens.value.find((t) => t.id === tokenId)
+    return token?.models?.[type]?.includes(modelKey) || false
+  }
+
+  const addTokenBuiltinModel = (tokenId, type, modelKey) => {
+    const token = apiTokens.value.find((t) => t.id === tokenId)
+    if (!token || !modelKey) return false
+    ensureTokenModelList(token, type)
+    if (token.models[type].includes(modelKey)) return false
+    token.models[type].push(modelKey)
+    return true
+  }
+
+  const removeTokenModel = (tokenId, type, modelKey) => {
+    const token = apiTokens.value.find((t) => t.id === tokenId)
+    if (!token?.models?.[type]) return false
+    const idx = token.models[type].indexOf(modelKey)
+    if (idx === -1) return false
+    token.models[type].splice(idx, 1)
+    if (token.customModels?.[type]) {
+      token.customModels[type] = token.customModels[type].filter((m) => m.key !== modelKey)
+    }
+    return true
+  }
+
+  const addTokenCustomModel = (tokenId, type, modelKey, label = '') => {
+    const token = apiTokens.value.find((t) => t.id === tokenId)
+    if (!token || !modelKey) return false
+    ensureTokenModelList(token, type)
+    if (token.models[type].includes(modelKey)) return false
+    token.models[type].push(modelKey)
+    token.customModels[type].push({ key: modelKey, label: label || modelKey })
+    return true
+  }
+
+  /** 节点级模型列表：未指定令牌时合并全部令牌已启用模型，指定令牌时仅该令牌模型 */
+  const getNodeTokenModels = (type, tokenId = '') => {
+    const builtin = BUILTIN_MODELS_BY_TYPE[type] || []
+    const customDefaults = CUSTOM_DEFAULTS_BY_TYPE[type] || {}
+
+    if (tokenId) {
+      const token = apiTokens.value.find((t) => t.id === tokenId)
+      if (!token?.apiKey) return []
+      return resolveTokenModels(token, type, builtin, customDefaults)
+    }
+
+    const seen = new Set()
+    const result = []
+    for (const token of apiTokens.value.filter((t) => t.apiKey)) {
+      for (const model of resolveTokenModels(token, type, builtin, customDefaults)) {
+        if (!seen.has(model.key)) {
+          seen.add(model.key)
+          result.push(model)
+        }
+      }
+    }
+    return result
+  }
+
+  const getNodeTokenModelOptions = (type, tokenId = '') =>
+    getNodeTokenModels(type, tokenId).map((m) => ({ label: m.label, key: m.key }))
+
+  // 兼容旧 API（逐步废弃）
+  const apiKeysByProvider = computed(() => {
+    const map = {}
+    for (const token of apiTokens.value) {
+      if (token.provider && token.apiKey) map[token.provider] = token.apiKey
+    }
+    return map
+  })
+
+  const baseUrlsByProvider = computed(() => {
+    const map = {}
+    for (const token of apiTokens.value) {
+      if (token.provider && token.baseUrl) map[token.provider] = token.baseUrl
+    }
+    return map
+  })
+
+  const setApiKeyByProvider = (provider, apiKey) => {
+    const token = apiTokens.value.find((t) => t.provider === provider)
+    if (token) updateToken(token.id, { apiKey })
+    else addToken({ name: '默认令牌', provider, apiKey, models: { chat: CHAT_MODELS.map(m => m.key), image: IMAGE_MODELS.map(m => m.key), video: VIDEO_MODELS.map(m => m.key) } })
+  }
+
+  const setBaseUrlByProvider = (provider, baseUrl) => {
+    const token = apiTokens.value.find((t) => t.provider === provider)
+    if (token) updateToken(token.id, { baseUrl })
+  }
+
+  const clearApiConfigByProvider = (provider) => {
+    const token = apiTokens.value.find((t) => t.provider === provider)
+    if (token) removeToken(token.id)
+  }
+
+  // 内置模型目录（供令牌配置 UI 使用）
+  const builtinChatModels = computed(() => CHAT_MODELS)
+  const builtinImageModels = computed(() => IMAGE_MODELS)
+  const builtinVideoModels = computed(() => VIDEO_MODELS)
+
   // 选中的模型
   const selectedChatModel = ref(getStored(STORAGE_KEYS.SELECTED_CHAT_MODEL, DEFAULT_CHAT_MODEL))
   const selectedImageModel = ref(getStored(STORAGE_KEYS.SELECTED_IMAGE_MODEL, DEFAULT_IMAGE_MODEL))
   const selectedVideoModel = ref(getStored(STORAGE_KEYS.SELECTED_VIDEO_MODEL, DEFAULT_VIDEO_MODEL))
 
-  // 按渠道存储的 API 配置
-  const apiKeysByProvider = ref(getStoredJson(STORAGE_KEYS.API_KEYS_BY_PROVIDER, {}))
-  const baseUrlsByProvider = ref(getStoredJson(STORAGE_KEYS.BASE_URLS_BY_PROVIDER, {}))
+  // 当前令牌可用模型
+  const allChatModels = computed(() =>
+    resolveTokenModels(currentToken.value, 'chat', CHAT_MODELS)
+  )
 
-  // 当前渠道的 API Key 和 Base URL
-  const currentApiKey = computed(() => apiKeysByProvider.value[currentProvider.value] || '')
-  const currentBaseUrl = computed(() => baseUrlsByProvider.value[currentProvider.value] || getDefaultBaseUrl(currentProvider.value))
+  const allImageModels = computed(() =>
+    resolveTokenModels(currentToken.value, 'image', IMAGE_MODELS, IMAGE_CUSTOM_DEFAULTS)
+  )
 
-  // 设置指定渠道的 API Key
-  const setApiKeyByProvider = (provider, apiKey) => {
-    apiKeysByProvider.value[provider] = apiKey
-  }
-
-  // 设置指定渠道的 Base URL
-  const setBaseUrlByProvider = (provider, baseUrl) => {
-    baseUrlsByProvider.value[provider] = baseUrl
-  }
-
-  // 清除指定渠道的 API 配置
-  const clearApiConfigByProvider = (provider) => {
-    delete apiKeysByProvider.value[provider]
-    delete baseUrlsByProvider.value[provider]
-  }
-
-  // ============ Computed: All Models (built-in + custom + by provider) ============
-
-  const allChatModels = computed(() => [
-    ...CHAT_MODELS.map(m => ({ ...m, isCustom: false })),
-    ...customChatModels.value.map(m => ({
-      label: m.label || m.key,
-      key: m.key,
-      isCustom: true
-    })),
-    // 添加当前渠道的自定义模型
-    ...(customChatModelsByProvider.value[currentProvider.value] || []).map(m => ({
-      label: m.label || m.key,
-      key: m.key,
-      isCustom: true,
-      provider: [currentProvider.value]
-    }))
-  ])
-
-  const allImageModels = computed(() => [
-    ...IMAGE_MODELS.map(m => ({ ...m, isCustom: false })),
-    ...customImageModels.value.map(m => ({
-      label: m.label || m.key,
-      key: m.key,
-      isCustom: true,
-      sizes: [],
-      defaultParams: { quality: 'standard', style: 'vivid' }
-    })),
-    // 添加当前渠道的自定义模型
-    ...(customImageModelsByProvider.value[currentProvider.value] || []).map(m => ({
-      label: m.label || m.key,
-      key: m.key,
-      isCustom: true,
-      sizes: [],
-      defaultParams: { quality: 'standard', style: 'vivid' },
-      provider: [currentProvider.value]
-    }))
-  ])
-
-  const allVideoModels = computed(() => [
-    ...VIDEO_MODELS.map(m => ({ ...m, isCustom: false })),
-    ...customVideoModels.value.map(m => ({
-      label: m.label || m.key,
-      key: m.key,
-      isCustom: true,
-      ratios: ['16x9', '9:16', '1:1'],
-      durs: [{ label: '5 秒', key: 5 }, { label: '10 秒', key: 10 }],
-      defaultParams: { ratio: '16:9', duration: 5 }
-    })),
-    // 添加当前渠道的自定义模型
-    ...(customVideoModelsByProvider.value[currentProvider.value] || []).map(m => ({
-      label: m.label || m.key,
-      key: m.key,
-      isCustom: true,
-      ratios: ['16x9', '9:16', '1:1'],
-      durs: [{ label: '5 秒', key: 5 }, { label: '10 秒', key: 10 }],
-      defaultParams: { ratio: '16:9', duration: 5 },
-      provider: [currentProvider.value]
-    }))
-  ])
+  const allVideoModels = computed(() =>
+    resolveTokenModels(currentToken.value, 'video', VIDEO_MODELS, VIDEO_CUSTOM_DEFAULTS)
+  )
 
   // ============ Computed: Available Models (filtered by provider) ============
 
@@ -304,54 +531,60 @@ export const useModelStore = defineStore('model', () => {
   // ============ Methods: Add/Remove Custom Models ============
 
   const addCustomChatModel = (modelKey, label = '') => {
+    const token = currentToken.value
+    if (token) return addTokenCustomModel(token.id, 'chat', modelKey, label)
     if (!modelKey || customChatModels.value.some(m => m.key === modelKey)) return false
     customChatModels.value.push({ key: modelKey, label: label || modelKey })
     return true
   }
 
   const addCustomImageModel = (modelKey, label = '') => {
+    const token = currentToken.value
+    if (token) return addTokenCustomModel(token.id, 'image', modelKey, label)
     if (!modelKey || customImageModels.value.some(m => m.key === modelKey)) return false
     customImageModels.value.push({ key: modelKey, label: label || modelKey })
     return true
   }
 
   const addCustomVideoModel = (modelKey, label = '') => {
+    const token = currentToken.value
+    if (token) return addTokenCustomModel(token.id, 'video', modelKey, label)
     if (!modelKey || customVideoModels.value.some(m => m.key === modelKey)) return false
     customVideoModels.value.push({ key: modelKey, label: label || modelKey })
     return true
   }
 
   const removeCustomChatModel = (modelKey) => {
+    const token = currentToken.value
+    if (token) return removeTokenModel(token.id, 'chat', modelKey)
     const idx = customChatModels.value.findIndex(m => m.key === modelKey)
     if (idx > -1) {
       customChatModels.value.splice(idx, 1)
-      if (selectedChatModel.value === modelKey) {
-        selectedChatModel.value = DEFAULT_CHAT_MODEL
-      }
+      if (selectedChatModel.value === modelKey) selectedChatModel.value = DEFAULT_CHAT_MODEL
       return true
     }
     return false
   }
 
   const removeCustomImageModel = (modelKey) => {
+    const token = currentToken.value
+    if (token) return removeTokenModel(token.id, 'image', modelKey)
     const idx = customImageModels.value.findIndex(m => m.key === modelKey)
     if (idx > -1) {
       customImageModels.value.splice(idx, 1)
-      if (selectedImageModel.value === modelKey) {
-        selectedImageModel.value = DEFAULT_IMAGE_MODEL
-      }
+      if (selectedImageModel.value === modelKey) selectedImageModel.value = DEFAULT_IMAGE_MODEL
       return true
     }
     return false
   }
 
   const removeCustomVideoModel = (modelKey) => {
+    const token = currentToken.value
+    if (token) return removeTokenModel(token.id, 'video', modelKey)
     const idx = customVideoModels.value.findIndex(m => m.key === modelKey)
     if (idx > -1) {
       customVideoModels.value.splice(idx, 1)
-      if (selectedVideoModel.value === modelKey) {
-        selectedVideoModel.value = DEFAULT_VIDEO_MODEL
-      }
+      if (selectedVideoModel.value === modelKey) selectedVideoModel.value = DEFAULT_VIDEO_MODEL
       return true
     }
     return false
@@ -518,9 +751,9 @@ export const useModelStore = defineStore('model', () => {
   watch(selectedImageModel, (val) => setStored(STORAGE_KEYS.SELECTED_IMAGE_MODEL, val))
   watch(selectedVideoModel, (val) => setStored(STORAGE_KEYS.SELECTED_VIDEO_MODEL, val))
 
-  // 监听并持久化 API 配置
-  watch(apiKeysByProvider, (val) => setStoredJson(STORAGE_KEYS.API_KEYS_BY_PROVIDER, val), { deep: true })
-  watch(baseUrlsByProvider, (val) => setStoredJson(STORAGE_KEYS.BASE_URLS_BY_PROVIDER, val), { deep: true })
+  // 监听并持久化 API 令牌
+  watch(apiTokens, (val) => setStoredJson(STORAGE_KEYS.API_TOKENS, val), { deep: true })
+  watch(currentTokenId, (val) => setStored(STORAGE_KEYS.CURRENT_TOKEN_ID, val))
 
   return {
     // Provider
@@ -601,7 +834,26 @@ export const useModelStore = defineStore('model', () => {
     // Clear all custom models
     clearCustomModels,
 
-    // API Config by provider
+    // API Tokens
+    apiTokens,
+    currentTokenId,
+    currentToken,
+    isApiConfigured,
+    setCurrentTokenId,
+    addToken,
+    updateToken,
+    removeToken,
+    isTokenModelEnabled,
+    addTokenBuiltinModel,
+    removeTokenModel,
+    addTokenCustomModel,
+    getNodeTokenModels,
+    getNodeTokenModelOptions,
+    builtinChatModels,
+    builtinImageModels,
+    builtinVideoModels,
+
+    // API Config (legacy compat)
     currentApiKey,
     currentBaseUrl,
     apiKeysByProvider,

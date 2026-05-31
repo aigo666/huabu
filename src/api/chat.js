@@ -3,18 +3,23 @@
  */
 
 import { request, getBaseUrl } from '@/utils'
+import { getCurrentTokenApiKey } from '@/utils/apiTokens'
 
 // 对话补全
-export const chatCompletions = (data) =>
-  request({
-    url: `/chat/completions`,
+export const chatCompletions = (data, options = {}) => {
+  const { endpoint = '/chat/completions', apiKey, silentError } = options
+  return request({
+    url: endpoint,
     method: 'post',
-    data
+    data,
+    _tokenApiKey: apiKey,
+    _silentError: silentError
   })
+}
 
 // 流式对话补全
 export const streamChatCompletions = async function* (data, signal, options = {}) {
-  const apiKey = localStorage.getItem('apiKey')
+  const apiKey = options.apiKey || getCurrentTokenApiKey()
   // 优先使用传入的 baseUrl，否则使用默认的
   const baseUrl = options.baseUrl || getBaseUrl()
   // 使用 options.endpoint 或默认的 /chat/completions

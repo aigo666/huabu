@@ -14,7 +14,7 @@
 #   BRANCH=dev
 #   DEPLOY_DIR=/www/wwwroot/huobao-canvas
 #   CONTAINER_NAME=huobao-canvas
-#   HOST_PORT=8080
+#   HOST_PORT=5000
 #   IMAGE_NAME=huobao-canvas
 #   IMAGE_TAG=latest
 #   API_PROXY=https://api.xgapi.top
@@ -25,7 +25,7 @@ REPO_URL="${REPO_URL:-https://github.com/aigo666/huabu.git}"
 BRANCH="${BRANCH:-dev}"
 DEPLOY_DIR="${DEPLOY_DIR:-/www/wwwroot/huobao-canvas}"
 CONTAINER_NAME="${CONTAINER_NAME:-huobao-canvas}"
-HOST_PORT="${HOST_PORT:-8080}"
+HOST_PORT="${HOST_PORT:-5000}"
 IMAGE_NAME="${IMAGE_NAME:-huobao-canvas}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
 API_PROXY="${API_PROXY:-https://api.xgapi.top}"

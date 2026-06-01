@@ -166,7 +166,7 @@ import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { NIcon, NDropdown, NSpin } from 'naive-ui'
 import { ChevronDownOutline, ChevronForwardOutline, CopyOutline, TrashOutline, RefreshOutline, AddOutline, ImageOutline, CreateOutline } from '@vicons/ionicons5'
 import { useImageGeneration } from '../../hooks'
-import { updateNode, addNode, addEdge, nodes, edges, duplicateNode, removeNode } from '../../stores/canvas'
+import { updateNode, addNode, addEdge, nodes, edges, duplicateNode, removeNode, flushProjectSave } from '../../stores/canvas'
 import NodeHandleMenu from './NodeHandleMenu.vue'
 import NodeTokenSelect from './NodeTokenSelect.vue'
 import NodeModelSelect from './NodeModelSelect.vue'
@@ -708,6 +708,7 @@ const handleGenerate = async (mode = 'auto') => {
       
       // Mark this config node as executed | 标记配置节点已执行
       updateNode(props.id, { executed: true, outputNodeId: imageNodeId })
+      flushProjectSave()
     }
     window.$message?.success('图片生成成功')
   } catch (err) {

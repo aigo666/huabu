@@ -255,7 +255,7 @@
  * Main infinite canvas with Vue Flow integration
  */
 import { ref, computed, onMounted, onUnmounted, watch, nextTick, markRaw } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { useRouter, useRoute, onBeforeRouteLeave } from 'vue-router'
 import { VueFlow, useVueFlow, applyNodeChanges } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { MiniMap } from '@vue-flow/minimap'
@@ -281,7 +281,7 @@ import {
   AppsOutline,
   ChatbubbleOutline
 } from '@vicons/ionicons5'
-import { nodes, edges, addNode, addNodes, addEdge, addEdges, updateNode, initSampleData, loadProject, saveProject, clearCanvas, canvasViewport, updateViewport, undo, redo, canUndo, canRedo, manualSaveHistory, startBatchOperation, endBatchOperation } from '../stores/canvas'
+import { nodes, edges, addNode, addNodes, addEdge, addEdges, updateNode, initSampleData, loadProject, saveProject, flushProjectSave, clearCanvas, canvasViewport, updateViewport, undo, redo, canUndo, canRedo, manualSaveHistory, startBatchOperation, endBatchOperation } from '../stores/canvas'
 import { loadAllModels } from '../stores/models'
 import { useChat, useWorkflowOrchestrator } from '../hooks'
 import { useModelStore } from '../stores/pinia'
@@ -828,8 +828,14 @@ const sendMessage = async () => {
 
 // Go back to home | 返回首页
 const goBack = () => {
+  flushProjectSave()
   router.push('/')
 }
+
+// 路由离开前立即保存，避免防抖未触发导致内容丢失
+onBeforeRouteLeave(() => {
+  flushProjectSave()
+})
 
 // Check if mobile | 检测是否移动端
 const checkMobile = () => {
@@ -856,7 +862,7 @@ watch(
     if (newId && newId !== oldId) {
       // Save current project before switching | 切换前保存当前项目
       if (oldId) {
-        saveProject()
+        flushProjectSave()
       }
       // Load new project | 加载新项目
       loadProjectById(newId)
@@ -897,7 +903,7 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('resize', checkMobile)
   // Save project before leaving | 离开前保存项目
-  saveProject()
+  flushProjectSave()
 })
 </script>
 

@@ -3,7 +3,7 @@
  * Manages nodes, edges and canvas state
  */
 import { ref, watch } from 'vue'
-import { updateProjectCanvas, getProjectCanvas } from './projects'
+import { updateProjectCanvas, getProjectCanvas, currentProjectId as projectsCurrentProjectId } from './projects'
 import { IMAGE_MODELS, VIDEO_MODELS, CHAT_MODELS, DEFAULT_IMAGE_MODEL, DEFAULT_VIDEO_MODEL, DEFAULT_CHAT_MODEL } from '../config/models'
 
 // Node ID counter | 节点ID计数器
@@ -428,6 +428,7 @@ export const loadProject = (projectId) => {
   autoSaveEnabled = false
   isRestoring = true
   currentProjectId.value = projectId
+  projectsCurrentProjectId.value = projectId
   
   const canvasData = getProjectCanvas(projectId)
   
@@ -467,14 +468,27 @@ export const loadProject = (projectId) => {
 
 /**
  * Save current project | 保存当前项目
+ * 使用深拷贝快照，避免保存时画布仍在变更导致数据不一致
  */
 export const saveProject = () => {
-  if (!currentProjectId.value) return
+  if (!currentProjectId.value) return false
   updateProjectCanvas(currentProjectId.value, {
-    nodes: nodes.value,
-    edges: edges.value,
-    viewport: canvasViewport.value
+    nodes: JSON.parse(JSON.stringify(nodes.value)),
+    edges: JSON.parse(JSON.stringify(edges.value)),
+    viewport: { ...canvasViewport.value }
   })
+  return true
+}
+
+/**
+ * 立即保存（取消未执行的防抖），离开页面前必须调用
+ */
+export const flushProjectSave = () => {
+  if (saveTimeout) {
+    clearTimeout(saveTimeout)
+    saveTimeout = null
+  }
+  return saveProject()
 }
 
 /**
@@ -489,6 +503,7 @@ const debouncedSave = () => {
   
   saveTimeout = setTimeout(() => {
     saveProject()
+    saveTimeout = null
   }, 500)
 }
 

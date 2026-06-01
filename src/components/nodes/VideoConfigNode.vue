@@ -179,7 +179,7 @@ import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { NIcon, NDropdown, NSpin } from 'naive-ui'
 import { ChevronForwardOutline, ChevronDownOutline, TrashOutline, VideocamOutline, CopyOutline, CreateOutline } from '@vicons/ionicons5'
 import { useVideoGeneration } from '../../hooks'
-import { updateNode, removeNode, duplicateNode, addNode, addEdge, nodes, edges } from '../../stores/canvas'
+import { updateNode, removeNode, duplicateNode, addNode, addEdge, nodes, edges, flushProjectSave } from '../../stores/canvas'
 import NodeHandleMenu from './NodeHandleMenu.vue'
 import NodeTokenSelect from './NodeTokenSelect.vue'
 import NodeModelSelect from './NodeModelSelect.vue'
@@ -539,6 +539,7 @@ const handleGenerate = async () => {
       window.$message?.success('视频生成成功')
       // Mark this config node as executed | 标记配置节点已执行
       updateNode(props.id, { executed: true, outputNodeId: videoNodeId })
+      flushProjectSave()
     } else if (newTaskId) {
       // 需要轮询，传递 taskId 给 VideoNode
       updateNode(videoNodeId, {

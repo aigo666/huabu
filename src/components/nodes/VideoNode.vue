@@ -144,7 +144,7 @@ import { ref, nextTick, watch, onMounted } from 'vue'
 import { Handle, Position, useVueFlow } from '@vue-flow/core'
 import { NIcon, NSpin } from 'naive-ui'
 import { TrashOutline, ExpandOutline, VideocamOutline, CopyOutline, CloseCircleOutline, DownloadOutline, EyeOutline, CreateOutline } from '@vicons/ionicons5'
-import { updateNode, removeNode, duplicateNode, addNode, addEdge, nodes } from '../../stores/canvas'
+import { updateNode, removeNode, duplicateNode, addNode, addEdge, nodes, flushProjectSave } from '../../stores/canvas'
 import { useVideoGeneration } from '../../hooks/useApi'
 import NodeHandleMenu from './NodeHandleMenu.vue'
 
@@ -217,6 +217,7 @@ const startPolling = async (taskId) => {
       label: '视频生成',
       taskId: null  // 清除 taskId
     })
+    flushProjectSave()
     window.$message?.success('视频生成成功')
   } catch (err) {
     // 轮询失败

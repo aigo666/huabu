@@ -317,11 +317,17 @@ export const getSortedProjects = (sortBy = 'updatedAt', order = 'desc') => {
   })
 }
 
+let projectsStoreHydrated = false
+
 /**
  * Initialize projects store | 初始化项目存储
+ * @param {boolean} forceReload - 强制从 localStorage 重新加载
  */
-export const initProjectsStore = () => {
-  loadProjects()
+export const initProjectsStore = (forceReload = false) => {
+  if (!projectsStoreHydrated || forceReload) {
+    loadProjects()
+    projectsStoreHydrated = true
+  }
   
   // Create sample project if empty | 如果为空则创建示例项目
   if (projects.value.length === 0) {

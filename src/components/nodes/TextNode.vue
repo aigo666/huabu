@@ -485,6 +485,8 @@ const handleInput = (e) => {
   lastContent.value = content.value
   nextTick(() => { isInternalUpdate = false })
 
+  scheduleContentSave()
+
   // 触发文本到 chip 的转换
   debouncedConvertMentions()
 
@@ -635,6 +637,16 @@ onMounted(() => {
 // Update content in store | 更新存储中的内容
 const updateContent = () => {
   updateNode(props.id, { content: content.value })
+}
+
+// 输入时防抖同步到 store，避免仅 blur 保存导致离开页面丢失文本
+let contentSaveTimer = null
+const scheduleContentSave = () => {
+  if (contentSaveTimer) clearTimeout(contentSaveTimer)
+  contentSaveTimer = setTimeout(() => {
+    updateContent()
+    contentSaveTimer = null
+  }, 400)
 }
 
 const handleTokenSelect = (tokenId) => {
